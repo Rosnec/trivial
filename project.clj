@@ -2,7 +2,7 @@
   :description "A proxy server implemented using a slightly modified version
                of TFTP."
   :url "https://github.com/Rosnec/trivial"
-  :license {:name "GNU General Public License"
+  :license {:name "GNU General Public License version 3"
             :url "https://www.gnu.org/licenses/gpl-3.0.html"}
   :dependencies [[org.clojure/clojure "1.5.1"]]
   :jar-name "trivial.jar"
