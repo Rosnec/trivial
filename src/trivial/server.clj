@@ -1,5 +1,4 @@
-(ns trivial.server
-  (:require [aleph.udp :as udp]))
+(ns trivial.server)
 
 (defn start
   ([options] nil))
