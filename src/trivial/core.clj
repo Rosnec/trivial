@@ -13,11 +13,6 @@
     :default 8888
     :parse-fn #(Integer/parseInt %)
     :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]]
-   ;; ["-H" "--hostname HOST" "Remote host"
-   ;;  :id :hostname
-   ;;  :default (InetAddress/getByName "localhost")
-   ;;  :default-desc "localhost"
-   ;;  :parse-fn #(InetAddress/getByName %)]
    ["-v" "--verbose" "Verbose"
     :id :verbose
     :default false]

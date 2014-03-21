@@ -1,6 +1,7 @@
 (ns trivial.tftp
   (:require [gloss.core :refer [defcodec ordered-map string]]
-            [gloss.io :refer [decode encode]])
+            [gloss.io :refer [contiguous decode encode]]
+            [trivial.util :as util])
   (:import [java.net DatagramPacket DatagramSocket]))
 
 ;; Defaults ;;
@@ -29,6 +30,7 @@
 
 ;; Size constants ;;
 (def BLOCK-SIZE 512)
+(def DATA-SIZE (+ BLOCK-SIZE 4))
 
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
@@ -95,27 +97,57 @@
 (defn rrq-packet
   "Create an RRQ packet."
   ([filename address port]
-     (datagram-packet (first (encode rrq-encoding
-                                     {:Filename filename}))
-                      address port)))
+     (datagram-packet (util/buffers->bytes (encode rrq-encoding
+                                                   {:Filename filename}))
+                      address) port))
 
 (defn wrq-packet
   "Create an WRQ packet."
   ([filename address port]
-     (datagram-packet (first (encode wrq-encoding
-                                     {:Filename filename}))
+     (datagram-packet (util/buffers->bytes (encode wrq-encoding
+                                                   {:Filename filename}))
                       address port)))
 
-(defn send-rrq
-  "Sends an RRQ packet over the socket."
-  ([filename socket]
-     (let [address (.getInetAddress socket)
-           port (.getPort socket)
-           packet (rrq-packet filename)]
-       (.send socket packet))))
+(defn data-packet
+  "Create a DATA packet."
+  ([block data address port]
+     (when (> (count data) BLOCK-SIZE)
+       (throw (Exception. "Oversized block of data.")))
+     (datagram-packet (util/buffers->bytes (encode data-encoding
+                                                   {:Block block,
+                                                    :Data data}))
+                      address port)))
+
+(defn data-packet
+  "Create a SLIDE packet."
+  ([block data address port]
+     (when (> (count data) BLOCK-SIZE)
+       (throw (Exception. "Oversized block of data.")))
+     (datagram-packet (util/buffers->bytes (encode slide-encoding
+                                                   {:Block block,
+                                                    :Data data}))
+                      address port)))
+
+(defn ack-packet
+  "Create an ACK packet."
+  ([block address port]
+     (datagram-packet (util/buffers->bytes (encode ack-encoding
+                                                   {:Block block}))
+                      address port)))
+
+(defn error-packet
+  "Create an ERROR packet."
+  ([code message address port]
+     (datagram-packet (util/buffers->bytes (encode error-encoding
+                                                   {:ErrorCode code,
+                                                    :ErrMsg message}))
+                      address port)))
 
 (defn recv-rrq
-  "Receives an RRQ packet from the socket, returning the filename.
+  "Receives an RRQ packet from the socket, returning a map containing:
+    :Filename - the name of the requested file
+    :TID      - the Transfer ID of the sender (i.e. the port #)
+    :address  - the address of the sender
   Throws a SocketException if a timeout occurs.
   Throws an Exception if the wrong kind of packet is received."
   ([socket]
@@ -125,10 +157,20 @@
            msg (.receive socket packet)
            contents (decode rrq-encoding msg)]
        (if (= (:Opcode contents) RRQ)
-         (:Filename contents)
+         {:Filename (:Filename contents),
+          :TID (.getPort packet),
+          :address (.getAddress packet)}
          (throw (Exception. "Non-RRQ packet received."))))))
 
-(defn recv-data)
+; Change this so it returns a map instead. Also change
+; the client/lockstep-session function to account for this change
+(defn recv-data
+  "Receives a DATA packet from the socket, returning the data and a boolean
+  indicating whether there will be more packets following it."
+  ([socket]
+     (recv-data socket (byte-array DATA-SIZE)))
+  ([socket bytes]
+     nil))
 
 
 (defn socket

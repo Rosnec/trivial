@@ -12,26 +12,41 @@
   ([address] (Inet6Address/getByName address)))
 
 (defn lockstep-session
-  "Runs a session with the provided proxy server using lockstep"
+  "Runs a session with the provided proxy server using lockstep."
   ([url server]
-     (tftp/send-rrq url server)
-     (try
-       (util/try-callback-times tftp/*retries*
-                                #(tftp/send-rrq url server)
-                                (tftp/recv-data server 1))
-       (loop [block 2]
-         (let [[received more?]
-               (util/try-callback-times tftp/*retries*
-                                        #(tftp/send-ack server (dec block))
-                                        (tftp/recv-data server block))]
-           (print received)
-           (if more?
-             (recur (inc block))
-             (tftp/send-ack server block))))
-       (catch SocketException e
-         (util/exit 1 "Server timed out."))
-       (finally
-         (.close server)))))
+     (let [address (.getInetAddress server)
+           port (.getPort server)
+           rrq-packet (tftp/rrq-packet url address port)
+           send-rrq #(.send server rrq-packet)]
+       (try
+         ; there's probably some off-by-one errors in the block #'s
+         (loop [block 0]
+           (let [callback (if (zero? block)
+                            send-rrq
+                            #(.send server (tftp/ack-packet block
+                                                            address
+                                                            port)))
+                 [result more?]
+                 (util/try-callback-times tftp/*retries*
+                                          callback
+                                          true
+                                          (tftp/recv-data server (inc block)))]
+             (print result)
+             (if more?
+               (recur (inc block))
+               (.send server (tftp/ack-packet (inc block)
+                                              address
+                                              port)
+                      server))))
+         (catch SocketException e
+           (util/exit 1 "Server timed out."))
+         (finally
+           (.close server))))))
+
+(defn sliding-session
+  "Runs a session with the provided proxy server using sliding window."
+  ([url server]
+     nil))
 
 (defn start
   ([url options]

@@ -1,4 +1,5 @@
-(ns trivial.util)
+(ns trivial.util
+  (:require [gloss.io :refer [contiguous]]))
 
 (defn exit [status msg]
   (println msg)
@@ -29,7 +30,8 @@
   "Executes thunk. If an exception is thrown, will call callback and then
   retry. At most n retries are done. If still some exception is thrown it is
   bubbled upwards in the call chain."
-  ([n callback thunk]
+  ([n callback initial? thunk]
+     (when initial? (callback))
      (loop [n n]
        (if-let [result (try
                          [(thunk)]
@@ -44,5 +46,9 @@
   "Executes body. If an exception is thrown, will call callback and then retry.
   At most n retries are done. If still some exception is thrown it is bubbled
   upwards in the call chain."
-  [n callback & body]
-  `(try-times* ~n ~callback (fn [] ~@body)))
+  [n callback initial? & body]
+  `(try-callback-times* ~n ~callback ~initial? (fn [] ~@body)))
+
+(defmacro buffers->bytes
+  "Takes a sequence of ByteBuffers and returns a single contiguous byte-array."
+  [buf-seq] `(.array (contiguous ~buf-seq)))
