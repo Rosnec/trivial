@@ -3,6 +3,12 @@
             [gloss.io :refer [decode encode]])
   (:import [java.net DatagramPacket DatagramSocket]))
 
+;; Defaults ;;
+; default datagram timeout in ms
+(def *timeout* 1000)
+; default number of retries
+(def *retries* 10)
+
 ;; Opcodes ;;
 (def RRQ   (short 1))
 (def WRQ   (short 2)) ; writing not implemented
@@ -81,13 +87,58 @@
   packets of length.
   If address and port are also specified, constructs a DatagramPacket for
   sending packets to that address and port."
-  ([length]
-     (DatagramPacket. (byte-array length) length))
-  ([length address port]
-     (DatagramPacket. (byte-array length) length address port)))
+  ([bytes]
+     (DatagramPacket. bytes (alength bytes)))
+  ([bytes address port]
+     (DatagramPacket. bytes (alength bytes) address port)))
 
-(defn datagram-socket
+(defn rrq-packet
+  "Create an RRQ packet."
+  ([filename address port]
+     (datagram-packet (first (encode rrq-encoding
+                                     {:Filename filename}))
+                      address port)))
+
+(defn wrq-packet
+  "Create an WRQ packet."
+  ([filename address port]
+     (datagram-packet (first (encode wrq-encoding
+                                     {:Filename filename}))
+                      address port)))
+
+(defn send-rrq
+  "Sends an RRQ packet over the socket."
+  ([filename socket]
+     (let [address (.getInetAddress socket)
+           port (.getPort socket)
+           packet (rrq-packet filename)]
+       (.send socket packet))))
+
+(defn recv-rrq
+  "Receives an RRQ packet from the socket, returning the filename.
+  Throws a SocketException if a timeout occurs.
+  Throws an Exception if the wrong kind of packet is received."
+  ([socket]
+     (recv-rrq socket (byte-array 4)))
+  ([socket bytes]
+     (let [packet (datagram-packet bytes)
+           msg (.receive socket packet)
+           contents (decode rrq-encoding msg)]
+       (if (= (:Opcode contents) RRQ)
+         (:Filename contents)
+         (throw (Exception. "Non-RRQ packet received."))))))
+
+(defn recv-data)
+
+
+(defn socket
   "Constructs a DatagramSocket."
-  ([] (DatagramSocket.))
-  ([port] (DatagramSocket. port))
-  ([port address] (DatagramSocket. port address)))
+  ([timeout]
+     (doto (DatagramSocket.)
+       (.setSoTimeout timeout)))
+  ([timeout port]
+     (doto (DatagramSocket. port)
+       (.setSoTimeout timeout)))
+  ([timeout port address]
+     (doto (DatagramSocket. port address)
+       (.setSoTimeout timeout))))

@@ -2,7 +2,8 @@
   (:require [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
             [trivial.client :as client]
-            [trivial.server :as server])
+            [trivial.server :as server]
+            [trivial.util :as util])
   (:import [java.net InetAddress])
   (:gen-class))
 
@@ -78,10 +79,6 @@
   (str "The following errors occurred while parsing your command:\n\n"
        (string/join \newline errors)))
 
-(defn exit [status msg]
-  (println msg)
-  (System/exit status))
-
 (defn -main
   "Runs either the server or client"
   [& args]
@@ -89,27 +86,27 @@
         (parse-opts args cli-options :in-order true)
         global-options options]
     (cond
-     (:help options) (exit 0 (usage summary))
-;     (not (<= 1 (count arguments) 2)) (exit 1 (usage summary))
-     errors (exit 1 (error-msg errors)))
+     (:help options) (util/exit 0 (usage summary))
+     errors (util/exit 1 (error-msg errors)))
     (println arguments)
     (case (first arguments)
       "server" (let [{:keys [options arguments errors summary]}
                      (parse-opts (rest arguments) server-options)]
                  (cond
-                  (:help options) (exit 0 (usage-server summary))
-                  (not= arguments 0) (exit 1 (usage-server summary))
-                  errors (exit 1 (error-msg errors)))
+                  (:help options) (util/exit 0 (usage-server summary))
+                  (not= arguments 0) (util/exit 1 (usage-server summary))
+                  errors (util/exit 1 (error-msg errors)))
                  (server/start (merge global-options options)))
       
       "client" (let [{:keys [options arguments errors summary]}
                      (parse-opts (rest arguments) client-options)]
                  (println arguments)
                  (cond
-                  (:help options) (exit 0 (usage-client summary))
-                  (not= (count arguments) 1) (exit 1 (usage-client summary))
-                  errors (exit 1 (error-msg errors)))
+                  (:help options) (util/exit 0 (usage-client summary))
+                  (not= (count arguments) 1) (util/exit 1
+                                                        (usage-client summary))
+                  errors (util/exit 1 (error-msg errors)))
                  (let [url (first arguments)]
                    (client/start url (merge global-options options))))
       
-      (exit 1 (usage summary)))))
+      (util/exit 1 (usage summary)))))
