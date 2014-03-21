@@ -5,7 +5,8 @@
   :license {:name "GNU General Public License version 3"
             :url "https://www.gnu.org/licenses/gpl-3.0.html"}
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.clojure/tools.cli "0.3.1"]]
+                 [org.clojure/tools.cli "0.3.1"]
+                 [aleph "0.3.2"]]
   :jar-name "trivial.jar"
   :uberjar-name "trivial-standalone.jar"
   :main trivial.core)
