@@ -1,7 +1,7 @@
 (ns trivial.tftp
   (:require [gloss.core :refer [defcodec ordered-map string]]
             [gloss.io :refer [decode encode]])
-  (:import [java.net DatagramPacket]))
+  (:import [java.net DatagramPacket DatagramSocket]))
 
 ;; Opcodes ;;
 (def RRQ   (short 1))
@@ -20,6 +20,9 @@
 (def FILE-ALREADY-EXISTS (short 6))
 (def NO-SUCH-USER        (short 7))
 
+;; Size constants ;;
+(def BLOCK-SIZE 512)
+
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
 (def open-string      (string :ascii))
@@ -27,32 +30,50 @@
 ;; Modes ;;
 (def octet-mode "OCTET")
 
-;; Packet types ;;
-(defcodec rrq-packet
+;; Packet encodings ;;
+(defcodec rrq-encoding
   (ordered-map
    :Opcode RRQ,
    :Filename delimited-string,
    :Mode octet-mode))
-
-(defcodec wrq-packet
+(defcodec wrq-encoding
   (ordered-map
    :Opcode WRQ,
    :Filename delimited-string,
    :Mode octet-mode))
-
-(defcodec data-packet
+(defcodec data-encoding
   (ordered-map
    :Opcode DATA,
    :Block :int16,
    :Data open-string))
-
-(defcodec ack-packet
+(defcodec ack-encoding
   (ordered-map
    :Opcode ACK,
    :Block :int16))
-
-(defcodec error-packet
+(defcodec error-encoding
   (ordered-map
    :Opcode ERROR,
    :ErrorCode :int16,
    :ErrMsg delimited-string))
+
+(defn transfer-identifier
+  "Randomly generates a transfer-identifier, which can be any number
+  between 0 and 65535."
+  ([] (rand-int 0x10000)))
+
+(defn datagram-packet
+  "Constructs a DatagramPacket.
+  If only length is specified, constructs a DatagramPacket for receiving
+  packets of length.
+  If address and port are also specified, constructs a DatagramPacket for
+  sending packets to that address and port."
+  ([length]
+     (DatagramPacket. (byte-array length) length))
+  ([length address port]
+     (DatagramPacket. (byte-array length) length address port)))
+
+(defn datagram-socket
+  "Constructs a DatagramSocket."
+  ([] (DatagramSocket.))
+  ([port] (DatagramSocket. port))
+  ([port address] (DatagramSocket. port address)))
