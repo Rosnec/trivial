@@ -9,6 +9,7 @@
 (def DATA  (short 3))
 (def ACK   (short 4))
 (def ERROR (short 5))
+(def SLIDE (short 6)) ; sliding window DATA
 
 ;; Error codes ;;
 (def UNDEFINED           (short 0))
@@ -31,31 +32,44 @@
 (def octet-mode "OCTET")
 
 ;; Packet encodings ;;
+; read request
 (defcodec rrq-encoding
   (ordered-map
    :Opcode RRQ,
    :Filename delimited-string,
    :Mode octet-mode))
+; write request
 (defcodec wrq-encoding
   (ordered-map
    :Opcode WRQ,
    :Filename delimited-string,
    :Mode octet-mode))
+; lock-step data
 (defcodec data-encoding
   (ordered-map
    :Opcode DATA,
    :Block :int16,
    :Data open-string))
+; sliding-window data
+(defcodec slide-encoding
+  (ordered-map
+   :Opcode SLIDE,
+   :Block :int16,
+   :Data open-string))
+; acknowledgement
 (defcodec ack-encoding
   (ordered-map
    :Opcode ACK,
    :Block :int16))
+; error
 (defcodec error-encoding
   (ordered-map
    :Opcode ERROR,
    :ErrorCode :int16,
    :ErrMsg delimited-string))
 
+; Probably unnecessary, since making a socket without specifying a
+; port causes it to pick a port in the interval [0x0 0x10000)
 (defn transfer-identifier
   "Randomly generates a transfer-identifier, which can be any number
   between 0 and 65535."
