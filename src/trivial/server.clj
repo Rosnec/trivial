@@ -4,7 +4,7 @@
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
   (:import [java.io FileNotFoundException IOException]
-           [java.net InetAddress SocketException URL]))
+           [java.net InetAddress SocketException SocketTimeoutException URL]))
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
@@ -28,8 +28,8 @@
                           (tftp/error-packet code msg
                                              (.getAddress packet)
                                              (.getPort packet))))
-           optcode-error
-           #(error tftp/ILLEGAL-OPERATION "Optcode error: awaiting requests.")
+           optcode-error #(error tftp/ILLEGAL-OPERATION
+                                 "Optcode error: awaiting requests.")
            file-not-found #(str "File " % " not found.")
            file-not-found-error #(error tftp/FILE-NOT-FOUND (file-not-found %))]
        (util/closed-loop
@@ -37,16 +37,21 @@
         (let [{:keys [Filename TID address sliding?] :as msg}
               (try
                 (tftp/recv-request socket packet)
+                (catch SocketTimeoutException e
+                  {})
                 (catch Exception e
+                  (util/verbose e)
                   (util/verbose (str "Illegal Optcode: "
                                      (.getMessage e)))
                   (optcode-error)
                   {}))
 
               session-fn (if sliding? sliding-session lockstep-session)]
-          (try
-            (with-open [stream (input-stream Filename)]
-              (session-fn stream socket))
-            (catch FileNotFoundException e
-              (util/verbose (str "File " Filename " not found."))
-                  (file-not-found-error Filename))))))))
+          (when (not (empty? msg))
+            (printf "You shouldn't be here!")
+            (try
+              (with-open [stream (input-stream Filename)]
+                (session-fn stream socket))
+              (catch FileNotFoundException e
+                (util/verbose (str "File " Filename " not found."))
+                (file-not-found-error Filename)))))))))

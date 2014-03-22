@@ -99,7 +99,7 @@
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode rrq-encoding
                                                    {:Filename filename}))
-                      address) port))
+                      address port)))
 
 (defn srq-packet
   "Create an SRQ packet."
