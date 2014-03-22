@@ -1,7 +1,7 @@
 (ns trivial.core
   (:require [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
-            [org.clojure/tools.trace :refer [trace-ns]]
+            [clojure.tools.trace :refer [trace-ns]]
             [trivial.client :as client]
             [trivial.server :as server]
             [trivial.tftp :refer [*drop*]]
