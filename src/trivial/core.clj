@@ -14,7 +14,7 @@
     :parse-fn #(Integer/parseInt %)
     :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]]
    ["-v" "--verbose" "Verbose"
-    :id :verbose
+    :id :verbose?
     :default false]
    ["-h" "--help"]])
 

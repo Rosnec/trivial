@@ -17,45 +17,39 @@
 
 (defn start
   ([options]
-     (let [port (:port options)
+     (let [verbose? (:verbose? options)
+           port (:port options)
            socket (tftp/socket port)
-           packet (tftp/datagram-packet (byte-array DATA-SIZE))]
-       (util/closed-loop socket []
-                         (try
-                           (let [{:keys [Filename TID address]}
-                                 (try
-                                   (tftp/recv-rrq socket packet)
-                                   (catch Exception e
-                                     (.send socket
-                                    (error-packet ILLEGAL-OPERATION
-                                                  "Only accepting RRQ's."
-                                                  (.getAddress packet)
-                                                  (.getPort packet)))))
-                                 url
-                                 (try
-                                   (new URL Filename)
-                                   (catch IOException e
-                                     (.send socket
-                                            (error-packet FILE-NOT-FOUND
-                                                          (str "File "
-                                                               Filename
-                                                               " not found.")
-                                                          (.getAddress packet)
-                                                          (.getPort packet)))))
-                                 stream (util/web-stream url)]
-                             )
-                           (catch IOException e
-                             (.send socket
-                                    (error-packet FILE-NOT-FOUND
-                                                  (str "File "
-                                                       Filename
-                                                       " not found.")
-                                                  (.getAddress packet)
-                                                  (.getPort packet))))
-                           (catch Exception e
-                             (.send socket
-                                    (error-packet ILLEGAL-OPERATION
-                                                  "Only accepting RRQ's."
-                                                  (.getAddress packet)
-                                                  (.getPort packet)))))))))
-
+           packet (tftp/datagram-packet (byte-array DATA-SIZE))
+           error (fn [code msg] (error-packet code msg
+                                             (.getAddress packet)
+                                             (.getPort packet)))
+           optcode-error]
+       (util/closed-loop
+        socket []
+        (try
+          (let [{:keys [Filename TID address] :as msg}
+                (try
+                  (tftp/recv-rrq socket packet)
+                  (catch Exception e
+                    (.send socket
+                           (error-packet ILLEGAL-OPERATION
+                                         "Optcode error: RRQ only."
+                                         (.getAddress packet)
+                                         (.getPort packet)))
+                    {}))
+                url
+                (try
+                  (when (not-empty msg)
+                    (new URL Filename))
+                  (catch IOException e
+                    (.send socket
+                           (error-packet FILE-NOT-FOUND
+                                         (str "File "
+                                              Filename
+                                              " not found.")
+                                         (.getAddress packet)
+                                         (.getPort packet)))))
+                stream (if ) (util/web-stream url)]
+            
+            )

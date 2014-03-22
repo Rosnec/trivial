@@ -33,15 +33,14 @@
                                           (tftp/recv-data server (inc block)))]
              (if (and (pos? block)
                       (not= block Block))
-               (recur )
-               )
-             (print Data)
-             (if more?
-               (recur (inc block))
-               (.send server (tftp/ack-packet (inc block)
-                                              address
-                                              port)
-                      server))))
+               (recur block)
+               (do (print Data)
+                   (if more?
+                     (recur (inc block))
+                     (.send server (tftp/ack-packet (inc block)
+                                                    address
+                                                    port)
+                            server))))))
          (catch SocketException e
            (util/exit 1 "Server timed out."))
          (finally

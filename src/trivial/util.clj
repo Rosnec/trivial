@@ -6,6 +6,15 @@
   (println msg)
   (System/exit status))
 
+(defn print-err
+  "Same as print but outputs to stdout."
+  ([& more] (binding [*print-readably* nil, *out* *err] (apply pr more))))
+
+(defn println-err
+  "Same as println but outputs to stdout."
+  ([& more] (binding [*print-readably* nil, *out* *err] (apply prn more))))
+
+
 (defn prob
   "Returns x with probability p, else returns y (or nil if not given)."
   ([p] (prob p p nil))
