@@ -80,7 +80,7 @@
 (defn -main
   "Runs either the server or client"
   [& args]
-  (trace-ns trivial.server)
+  (trace-ns server)
   (let [{:keys [options arguments errors summary]}
         (parse-opts args cli-options :in-order true)
         global-options options]
@@ -105,18 +105,15 @@
                    (util/verbose "Starting server.")
                    (server/start options))
 
-
-        
         "client" (let [{:keys [options arguments errors summary]}
                        (parse-opts (rest arguments) client-options)]
-                   (println arguments)
                    (cond
                     (:help options) (util/exit 0 (usage-client summary))
                     (not= (count arguments) 1) (util/exit
                                                 1 (usage-client summary))
                     errors (util/exit 1 (error-msg errors)))
                    (let [url (first arguments)]
-                     (util/verbose "Starting client.")
+                     (util/verbose "Starting client with url:" url)
                      (client/start url (merge global-options options))))
-        
+
         (util/exit 1 (usage summary))))))
