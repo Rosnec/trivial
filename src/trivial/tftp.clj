@@ -6,13 +6,13 @@
 
 ;; Defaults ;;
 ; default datagram timeout in ms
-(def *timeout* 1000)
+(def :^dynamic *timeout* 1000)
 ; default number of retries
-(def *retries* 10)
+(def :^dynamic *retries* 10)
 ; number of packets to send concurrently
-(def *window-size* 4)
+(def :^dynamic *window-size* 4)
 ; whether or not to drop packets
-(def *drop* false)
+(def :^dynamic *drop* false)
 
 ;; Opcodes ;;
 (def RRQ   (short 1))

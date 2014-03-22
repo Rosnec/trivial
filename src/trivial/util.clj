@@ -3,7 +3,7 @@
   (:import [java.io BufferedReader InputStreamReader]))
 
 ; Verbose flag
-(def *verbose* false)
+(def :^dynamic *verbose* false)
 
 (defn exit
   "Exit the program with the status and message if given, otherwise status 0."
