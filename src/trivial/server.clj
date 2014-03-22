@@ -1,15 +1,16 @@
 (ns trivial.server
   (:require [trivial.tftp :as tftp]
             [trivial.util :as util])
-  (:import [java.net InetAddress SocketException URL]))
+  (:import [java.io IOException]
+           [java.net InetAddress SocketException URL]))
 
 (defn lockstep-session
-  ""
-  ([data client]))
+  "Sends the contents of stream to client using lockstep."
+  ([stream client]))
 
 (defn sliding-session
-  ""
-  ([data client]
+  "Sends the contents of stream to client using sliding window."
+  ([stream client]
      (comment
        (loop [panorama (partition tftp/*window-size* 1 packets)]
          (let [num-received ...]
@@ -20,36 +21,38 @@
      (let [verbose? (:verbose? options)
            port (:port options)
            socket (tftp/socket port)
-           packet (tftp/datagram-packet (byte-array DATA-SIZE))
-           error (fn [code msg] (error-packet code msg
-                                             (.getAddress packet)
-                                             (.getPort packet)))
-           optcode-error]
+           packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
+           error (fn [code msg] (.send socket
+                                      (tftp/error-packet code msg
+                                                         (.getAddress packet)
+                                                         (.getPort packet))))
+           optcode-error
+           #(error tftp/ILLEGAL-OPERATION "Optcode error: awaiting requests.")
+           file-not-found #(str "File " % " not found.")
+           file-not-found-error #(error tftp/FILE-NOT-FOUND (file-not-found %))]
        (util/closed-loop
         socket []
-        (try
-          (let [{:keys [Filename TID address] :as msg}
-                (try
-                  (tftp/recv-rrq socket packet)
-                  (catch Exception e
-                    (.send socket
-                           (error-packet ILLEGAL-OPERATION
-                                         "Optcode error: RRQ only."
-                                         (.getAddress packet)
-                                         (.getPort packet)))
-                    {}))
-                url
-                (try
-                  (when (not-empty msg)
-                    (new URL Filename))
-                  (catch IOException e
-                    (.send socket
-                           (error-packet FILE-NOT-FOUND
-                                         (str "File "
-                                              Filename
-                                              " not found.")
-                                         (.getAddress packet)
-                                         (.getPort packet)))))
-                stream (if ) (util/web-stream url)]
-            
-            )
+        (let [{:keys [Filename TID address sliding?] :as msg}
+              (try
+                (tftp/recv-request socket packet)
+                (catch Exception e
+                  (util/verbose (str "Illegal Optcode"))
+                  (optcode-error)
+                  {}))
+              url
+              (try
+                (when (not-empty msg)
+                  (new URL Filename))
+                (catch IOException e
+                  (util/verbose (str "File " Filename " not found."))
+                  (file-not-found-error Filename)
+                  nil))
+              stream
+              (try
+                (when (not= url nil) (util/web-stream url))
+                (catch IOException e
+                  (util/verbose (.getMessage e))
+                  nil))
+              session-fn (if sliding? sliding-session lockstep-session)]
+          (when (not= nil stream)
+            (session-fn stream socket)))))))

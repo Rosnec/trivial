@@ -16,11 +16,10 @@
 
 ;; Opcodes ;;
 (def RRQ   (short 1))
-(def WRQ   (short 2)) ; writing not implemented
+(def SRQ   (short 2)) ; replace WRQ with SRQ for sliding window reads
 (def DATA  (short 3))
 (def ACK   (short 4))
 (def ERROR (short 5))
-(def SLIDE (short 6)) ; sliding window DATA
 
 ;; Error codes ;;
 (def UNDEFINED           (short 0))
@@ -53,10 +52,10 @@
    :Opcode RRQ,
    :Filename delimited-string,
    :Mode octet-mode))
-; write request
-(defcodec wrq-encoding
+; sliding request
+(defcodec srq-encoding
   (ordered-map
-   :Opcode WRQ,
+   :Opcode SRQ,
    :Filename delimited-string,
    :Mode octet-mode))
 ; lock-step data
@@ -108,10 +107,10 @@
                                                    {:Filename filename}))
                       address) port))
 
-(defn wrq-packet
-  "Create an WRQ packet."
+(defn srq-packet
+  "Create an SRQ packet."
   ([filename address port]
-     (datagram-packet (util/buffers->bytes (encode wrq-encoding
+     (datagram-packet (util/buffers->bytes (encode srq-encoding
                                                    {:Filename filename}))
                       address port)))
 
@@ -121,16 +120,6 @@
      (when (> (count data) BLOCK-SIZE)
        (throw (Exception. "Oversized block of data.")))
      (datagram-packet (util/buffers->bytes (encode data-encoding
-                                                   {:Block block,
-                                                    :Data data}))
-                      address port)))
-
-(defn data-packet
-  "Create a SLIDE packet."
-  ([block data address port]
-     (when (> (count data) BLOCK-SIZE)
-       (throw (Exception. "Oversized block of data.")))
-     (datagram-packet (util/buffers->bytes (encode slide-encoding
                                                    {:Block block,
                                                     :Data data}))
                       address port)))
@@ -157,6 +146,24 @@
        (throw (new SocketException "Dropping packet."))
        (.receive socket packet))
      packet))
+
+(defn recv-request
+  "Receives a request (RRQ or SRQ) packet from the socket, returning the mapping
+    :Filename - the name of the requested file
+    :TID      - the Transfer ID of the sender (i.e. the port #)
+    :address  - the address of the sender
+    :sliding? - whether or not to use sliding-window
+  Throws a SocketException if a timeout occurs.
+  Throws an Exception if the wrong kind of packet is received."
+  ([socket packet]
+     (let [msg (recv socket packet)
+           contents (decode rrq-encoding msg)]
+       (if ([RRQ SRQ] (:Opcode contents))
+         {:Filename (:Filename contents),
+          :TID (.getPort packet),
+          :address (.getAddress packet),
+          :sliding? (= SRQ (:Opcode contents))}
+         (throw (Exception. "Non-request packet received."))))))
 
 (defn recv-rrq
   "Receives an RRQ packet from the socket, returning a map containing:

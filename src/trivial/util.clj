@@ -2,18 +2,26 @@
   (:require [gloss.io :refer [contiguous]])
   (:import [java.io BufferedReader InputStreamReader]))
 
-(defn exit [status msg]
-  (println msg)
-  (System/exit status))
+; Verbose flag
+(def *verbose* false)
+
+(defn exit
+  "Exit the program with the status and message if given, otherwise status 0."
+  ([]                         (System/exit 0))
+  ([status]                   (System/exit status))
+  ([status msg] (println msg) (System/exit status)))
 
 (defn print-err
   "Same as print but outputs to stdout."
-  ([& more] (binding [*print-readably* nil, *out* *err] (apply pr more))))
+  ([& more] (binding [*print-readably* nil, *out* *err*] (apply pr more))))
 
 (defn println-err
   "Same as println but outputs to stdout."
-  ([& more] (binding [*print-readably* nil, *out* *err] (apply prn more))))
+  ([& more] (binding [*print-readably* nil, *out* *err*] (apply prn more))))
 
+(defn verbose
+  "When *verbose* is true, outputs body to stderr."
+  ([& more] (when *verbose* (apply println-err more))))
 
 (defn prob
   "Returns x with probability p, else returns y (or nil if not given)."
@@ -30,13 +38,13 @@
   "Same as loop, but takes an object with a .close method and calls it after
   the loop terminates."
   ([closable bindings & body]
-     `(finally-loop ~bindings (.close ~closable) ~@body)))
+     `(finally-loop (.close ~closable) ~bindings ~@body)))
 
 (defmacro web-stream
   "Returns a BufferedReader stream from the URL."
   ([url] `(-> (.openStream ~url)
-              (new InputStreamReader)
-              (new BufferedReader))))
+              (InputStreamReader.)
+              (BufferedReader.))))
 
 (defn try-times*
   "Executes thunk. If an exception is thrown, will retry. At most n retries

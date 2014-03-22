@@ -38,8 +38,7 @@
   (->> ["A proxy server/client program using a modified TFTP."
         ""
         "Usage: trivial [options] "
-        "               [server [server-options]|"
-        "                client <url> [client-options]]"
+        "               [server [server-options]|client url [client-options]]"
         ""
         "Options:"
         options-summary
