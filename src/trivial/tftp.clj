@@ -2,13 +2,15 @@
   (:require [gloss.core :refer [defcodec ordered-map string]]
             [gloss.io :refer [contiguous decode encode]]
             [trivial.util :as util])
-  (:import [java.net DatagramPacket DatagramSocket]))
+  (:import [java.net DatagramPacket DatagramSocket SocketException]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
 (def *timeout* 1000)
 ; default number of retries
 (def *retries* 10)
+; whether or not to drop packets
+(def *drop* false)
 
 ;; Opcodes ;;
 (def RRQ   (short 1))
@@ -90,9 +92,9 @@
   If address and port are also specified, constructs a DatagramPacket for
   sending packets to that address and port."
   ([bytes]
-     (DatagramPacket. bytes (alength bytes)))
+     (new DatagramPacket bytes (alength bytes)))
   ([bytes address port]
-     (DatagramPacket. bytes (alength bytes) address port)))
+     (new DatagramPacket bytes (alength bytes) address port)))
 
 (defn rrq-packet
   "Create an RRQ packet."
@@ -143,6 +145,14 @@
                                                     :ErrMsg message}))
                       address port)))
 
+(defn recv
+  "Receives a packet"
+  ([socket packet]
+     (if (and *drop* (util/prob 0.01))
+       (throw (new SocketException "Dropping packet."))
+       (.receive socket packet))
+     packet))
+
 (defn recv-rrq
   "Receives an RRQ packet from the socket, returning a map containing:
     :Filename - the name of the requested file
@@ -151,10 +161,9 @@
   Throws a SocketException if a timeout occurs.
   Throws an Exception if the wrong kind of packet is received."
   ([socket]
-     (recv-rrq socket (byte-array 4)))
-  ([socket bytes]
-     (let [packet (datagram-packet bytes)
-           msg (.receive socket packet)
+     (recv-rrq socket (datagram-packet (byte-array 4))))
+  ([socket packet]
+     (let [msg (recv socket packet)
            contents (decode rrq-encoding msg)]
        (if (= (:Opcode contents) RRQ)
          {:Filename (:Filename contents),
@@ -168,10 +177,32 @@
   "Receives a DATA packet from the socket, returning the data and a boolean
   indicating whether there will be more packets following it."
   ([socket]
-     (recv-data socket (byte-array DATA-SIZE)))
-  ([socket bytes]
-     nil))
+     (recv-data socket (datagram-packet (byte-array DATA-SIZE))))
+  ([socket packet]
+     (let [msg (recv socket packet)
+           contents (decode data-encoding msg)
+           data (:Data contents)
+           more? (= (count data) BLOCK-SIZE)
+           block (:Block contents)]
+       (if (= (:Opcode contents) DATA)
+         {:Block block,
+          :Data data,
+          :more? more?,
+          :TID (.getPort packet),
+          :address (.getAddress packet)}))))
 
+(defn recv-slide
+  "Receives a SLIDE packet from the socket, returning the data and a boolean
+  indicating whether there will be more packets following it."
+  ([socket]
+     (recv-data socket (datagram-packet (byte-array DATA-SIZE))))
+  ([socket packet]
+     (let [msg (recv socket packet)
+           contents (decode data-encoding msg)]
+       (if (= (:Opcode contents) DATA)
+         {:Block (:Block contents),
+          :TID (.getPort packet),
+          :address (.getAddress packet)}))))
 
 (defn socket
   "Constructs a DatagramSocket."

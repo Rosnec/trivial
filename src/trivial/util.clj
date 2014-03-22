@@ -5,6 +5,23 @@
   (println msg)
   (System/exit status))
 
+(defn prob
+  "Returns x with probability p, else returns y (or nil if not given)."
+  ([p] (prob p p nil))
+  ([p x] (prob p x nil))
+  ([p x y] (if (< (rand) p) x y)))
+
+(defmacro finally-loop
+  "Same as loop, but executes a finally clause after the loop terminates."
+  ([finally-clause bindings & body]
+     `(try (loop ~bindings ~@body) (finally ~finally-clause))))
+
+(defmacro closed-loop
+  "Same as loop, but takes an object with a .close method and calls it after
+  the loop terminates."
+  ([closable bindings & body]
+     `(finally-loop ~bindings (.close ~closable) ~@body)))
+
 (defn try-times*
   "Executes thunk. If an exception is thrown, will retry. At most n retries
   are done. If still some exception is thrown it is bubbled upwards in

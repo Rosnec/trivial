@@ -26,12 +26,16 @@
                             #(.send server (tftp/ack-packet block
                                                             address
                                                             port)))
-                 [result more?]
+                 {:keys [Block Data more? TID address]}
                  (util/try-callback-times tftp/*retries*
                                           callback
                                           true
                                           (tftp/recv-data server (inc block)))]
-             (print result)
+             (if (and (pos? block)
+                      (not= block Block))
+               (recur )
+               )
+             (print Data)
              (if more?
                (recur (inc block))
                (.send server (tftp/ack-packet (inc block)
