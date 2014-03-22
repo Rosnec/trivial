@@ -1,5 +1,6 @@
 (ns trivial.util
-  (:require [gloss.io :refer [contiguous]]))
+  (:require [gloss.io :refer [contiguous]])
+  (:import [java.io BufferedReader InputStreamReader]))
 
 (defn exit [status msg]
   (println msg)
@@ -21,6 +22,12 @@
   the loop terminates."
   ([closable bindings & body]
      `(finally-loop ~bindings (.close ~closable) ~@body)))
+
+(defmacro web-stream
+  "Returns a BufferedReader stream from the URL."
+  ([url] `(-> (.openStream ~url)
+              (new InputStreamReader)
+              (new BufferedReader))))
 
 (defn try-times*
   "Executes thunk. If an exception is thrown, will retry. At most n retries

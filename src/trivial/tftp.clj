@@ -1,5 +1,5 @@
 (ns trivial.tftp
-  (:require [gloss.core :refer [defcodec ordered-map string]]
+  (:require [gloss.core :refer [defcodec ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode]]
             [trivial.util :as util])
   (:import [java.net DatagramPacket DatagramSocket SocketException]))
@@ -9,6 +9,8 @@
 (def *timeout* 1000)
 ; default number of retries
 (def *retries* 10)
+; number of packets to send concurrently
+(def *window-size* 4)
 ; whether or not to drop packets
 (def *drop* false)
 
@@ -33,6 +35,9 @@
 ;; Size constants ;;
 (def BLOCK-SIZE 512)
 (def DATA-SIZE (+ BLOCK-SIZE 4))
+
+;; Octet encoding ;;
+(def octet (repeated :byte))
 
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
