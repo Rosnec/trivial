@@ -88,14 +88,22 @@
     (binding [*verbose* (:verbose? options)
               *drop*    (:drop? options)]
       (case (first arguments)
-        "server" (let [{:keys [options arguments errors summary]}
-                       (parse-opts (rest arguments) server-options)]
-                   (cond
-                    (:help options) (util/exit 0 (usage-server summary))
-                    (not= arguments 0) (util/exit 1 (usage-server summary))
-                    errors (util/exit 1 (error-msg errors)))
+        "server" (do
+                   ;; back when I had options for the server
+                   (comment
+                     (let [{:keys [options arguments errors summary]}
+                           (parse-opts (rest arguments) server-options)]
+                       (cond
+                        (:help options) (util/exit 0 (usage-server summary))
+                        (not= arguments 0) (util/exit 1 (usage-server summary))
+                        errors (util/exit 1 (error-msg errors)))
+                       (util/verbose "Starting server.")
+                       (server/start (merge global-options options))))
+                   ;;
                    (util/verbose "Starting server.")
-                   (server/start (merge global-options options)))
+                   (server/start options))
+
+
         
         "client" (let [{:keys [options arguments errors summary]}
                        (parse-opts (rest arguments) client-options)]
