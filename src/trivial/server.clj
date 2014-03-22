@@ -1,7 +1,8 @@
 (ns trivial.server
-  (:require [trivial.tftp :as tftp]
+  (:require [clojure.java.io :refer [input-stream]]
+            [trivial.tftp :as tftp]
             [trivial.util :as util])
-  (:import [java.io IOException]
+  (:import [java.io FileNotFoundException IOException]
            [java.net InetAddress SocketException URL]))
 
 (defn lockstep-session
@@ -39,20 +40,11 @@
                   (util/verbose (str "Illegal Optcode"))
                   (optcode-error)
                   {}))
-              url
-              (try
-                (when (not-empty msg)
-                  (new URL Filename))
-                (catch IOException e
-                  (util/verbose (str "File " Filename " not found."))
-                  (file-not-found-error Filename)
-                  nil))
-              stream
-              (try
-                (when (not= url nil) (util/web-stream url))
-                (catch IOException e
-                  (util/verbose (.getMessage e))
-                  nil))
+              
               session-fn (if sliding? sliding-session lockstep-session)]
-          (when (not= nil stream)
-            (session-fn stream socket)))))))
+          (try
+            (with-open [stream (input-stream Filename)]
+              (session-fn stream socket))
+            (catch FileNotFoundException e
+              (util/verbose (str "File " Filename " not found."))
+                  (file-not-found-error Filename))))))))
