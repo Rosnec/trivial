@@ -1,7 +1,7 @@
 (ns trivial.client
   (:require [trivial.tftp :as tftp]
             [trivial.util :as util])
-  (:import [java.net Inet4Address Inet6Address SocketException]))
+  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]))
 
 (defn IPv4-address
   "Returns an InetAddress wrapper around the address using IPv4"
@@ -41,7 +41,7 @@
                                                     address
                                                     port)
                             server))))))
-         (catch SocketException e
+         (catch SocketTimeoutException e
            (util/exit 1 "Server timed out."))
          (finally
            (.close server))))))
