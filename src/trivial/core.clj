@@ -1,6 +1,7 @@
 (ns trivial.core
   (:require [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
+            [org.clojure/tools.trace :refer [trace-ns]]
             [trivial.client :as client]
             [trivial.server :as server]
             [trivial.tftp :refer [*drop*]]
@@ -79,6 +80,7 @@
 (defn -main
   "Runs either the server or client"
   [& args]
+  (trace-ns trivial.server)
   (let [{:keys [options arguments errors summary]}
         (parse-opts args cli-options :in-order true)
         global-options options]
