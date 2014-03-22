@@ -54,4 +54,5 @@
                 (session-fn stream socket))
               (catch FileNotFoundException e
                 (util/verbose (str "File " Filename " not found."))
-                (file-not-found-error Filename)))))))))
+                (file-not-found-error Filename))))
+          (recur))))))
