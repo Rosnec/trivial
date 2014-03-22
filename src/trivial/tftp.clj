@@ -58,16 +58,10 @@
    :Opcode SRQ,
    :Filename delimited-string,
    :Mode octet-mode))
-; lock-step data
+; data
 (defcodec data-encoding
   (ordered-map
    :Opcode DATA,
-   :Block :int16,
-   :Data open-string))
-; sliding-window data
-(defcodec slide-encoding
-  (ordered-map
-   :Opcode SLIDE,
    :Block :int16,
    :Data open-string))
 ; acknowledgement

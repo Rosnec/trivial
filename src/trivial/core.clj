@@ -3,7 +3,9 @@
             [clojure.tools.cli :refer [parse-opts]]
             [trivial.client :as client]
             [trivial.server :as server]
-            [trivial.util :as util])
+            [trivial.tftp :refer [*drop*]]
+            [trivial.util :as util]
+            [trivial.util :refer [*verbose*]])
   (:import [java.net InetAddress])
   (:gen-class))
 
@@ -12,27 +14,28 @@
     :id :port
     :default 8888
     :parse-fn #(Integer/parseInt %)
-    :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]]
+    :validate [#(< 0 % 0x10000) "Must be a number between 0 and 65536"]],
+   ["-d" "--drop" "Packet drop mode"
+    :id :drop?
+    :default false],
    ["-v" "--verbose" "Verbose"
     :id :verbose?
-    :default false]
+    :default false],
    ["-h" "--help"]])
 
 (def client-options
   [["-H" "--hostname HOST" "Remote host"
     :id :hostname
-    :default "localhost"]
+    :default "localhost"],
    [nil "--IPv6" "IPv6 mode"
-    :id :IPv6
-    :default false]
+    :id :IPv6?
+    :default false],
    [nil "--sliding-window" "Sliding window mode"
-    :id :sliding-window
+    :id :sliding-window?
     :default false]])
 
 (def server-options
-  [[nil "--drop" "Packet drop mode"
-    :id :drop
-    :default false]])
+  [])
 
 (defn usage [options-summary]
   (->> ["A proxy server/client program using a modified TFTP."
@@ -82,25 +85,27 @@
     (cond
      (:help options) (util/exit 0 (usage summary))
      errors (util/exit 1 (error-msg errors)))
-    (println arguments)
-    (case (first arguments)
-      "server" (let [{:keys [options arguments errors summary]}
-                     (parse-opts (rest arguments) server-options)]
-                 (cond
-                  (:help options) (util/exit 0 (usage-server summary))
-                  (not= arguments 0) (util/exit 1 (usage-server summary))
-                  errors (util/exit 1 (error-msg errors)))
-                 (server/start (merge global-options options)))
-      
-      "client" (let [{:keys [options arguments errors summary]}
-                     (parse-opts (rest arguments) client-options)]
-                 (println arguments)
-                 (cond
-                  (:help options) (util/exit 0 (usage-client summary))
-                  (not= (count arguments) 1) (util/exit 1
-                                                        (usage-client summary))
-                  errors (util/exit 1 (error-msg errors)))
-                 (let [url (first arguments)]
-                   (client/start url (merge global-options options))))
-      
-      (util/exit 1 (usage summary)))))
+    (binding [*verbose* (:verbose? options)
+              *drop*    (:drop? options)]
+      (case (first arguments)
+        "server" (let [{:keys [options arguments errors summary]}
+                       (parse-opts (rest arguments) server-options)]
+                   (cond
+                    (:help options) (util/exit 0 (usage-server summary))
+                    (not= arguments 0) (util/exit 1 (usage-server summary))
+                    errors (util/exit 1 (error-msg errors)))
+                   (binding [*verbose* (options)])
+                   (server/start (merge global-options options)))
+        
+        "client" (let [{:keys [options arguments errors summary]}
+                       (parse-opts (rest arguments) client-options)]
+                   (println arguments)
+                   (cond
+                    (:help options) (util/exit 0 (usage-client summary))
+                    (not= (count arguments) 1) (util/exit
+                                                1 (usage-client summary))
+                    errors (util/exit 1 (error-msg errors)))
+                   (let [url (first arguments)]
+                     (client/start url (merge global-options options))))
+        
+        (util/exit 1 (usage summary))))))
