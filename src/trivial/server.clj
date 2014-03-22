@@ -1,7 +1,8 @@
 (ns trivial.server
   (:require [clojure.java.io :refer [input-stream]]
             [trivial.tftp :as tftp]
-            [trivial.util :as util])
+            [trivial.util :as util]
+            [trivial.util :refer [dbg verbose]])
   (:import [java.io FileNotFoundException IOException]
            [java.net InetAddress SocketException URL]))
 
@@ -19,28 +20,29 @@
 
 (defn start
   ([options]
-     (let [verbose? (:verbose? options)
-           port (:port options)
-           socket (tftp/socket port)
-           packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           error (fn [code msg] (.send socket
-                                      (tftp/error-packet code msg
-                                                         (.getAddress packet)
-                                                         (.getPort packet))))
+     (let [port (dbg (:port options))
+           socket (dbg (tftp/socket port))
+           packet (dbg (tftp/datagram-packet (byte-array tftp/DATA-SIZE)))
+           error (dbg (fn [code msg] (.send socket
+                                           (tftp/error-packet code msg
+                                                              (.getAddress packet)
+                                                              (.getPort packet)))))
            optcode-error
-           #(error tftp/ILLEGAL-OPERATION "Optcode error: awaiting requests.")
+           (dbg #(error tftp/ILLEGAL-OPERATION "Optcode error: awaiting requests."))
            file-not-found #(str "File " % " not found.")
            file-not-found-error #(error tftp/FILE-NOT-FOUND (file-not-found %))]
+       (dbg "are we here yet?")
        (util/closed-loop
         socket []
         (let [{:keys [Filename TID address sliding?] :as msg}
               (try
                 (tftp/recv-request socket packet)
                 (catch Exception e
-                  (util/verbose (str "Illegal Optcode"))
+                  (util/verbose (str "Illegal Optcode: "
+                                     (.getMessage e)))
                   (optcode-error)
                   {}))
-              
+
               session-fn (if sliding? sliding-session lockstep-session)]
           (try
             (with-open [stream (input-stream Filename)]

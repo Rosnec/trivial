@@ -5,6 +5,16 @@
 ; Verbose flag
 (def ^:dynamic *verbose* false)
 
+(defmacro dbg
+  "Executes the expression x, then prints the expression and its output to
+  stderr, while also returning value.
+       example=> (dbg (+ 2 2))
+       dbg: (+ 2 2) = 4
+       4"
+  ([x] `(dbg ~x "dbg:" "="))
+  ([x msg] `(dbg ~x ~msg "="))
+  ([x msg sep] `(let [x# ~x] (println-err ~msg '~x ~sep x#) x#)))
+
 (defn exit
   "Exit the program with the status and message if given, otherwise status 0."
   ([]                         (System/exit 0))
