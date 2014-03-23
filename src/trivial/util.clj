@@ -56,6 +56,10 @@
               (InputStreamReader.)
               (BufferedReader.))))
 
+(defmacro byte-stream->seq
+  "Lazily transforms a byte stream into a chunked seq of bytes."
+  ([stream buffer] (repeatedly #(do (.read stream buffer) (seq buffer)))))
+
 (defn try-times*
   "Executes thunk. If an exception is thrown, will retry. At most n retries
   are done. If still some exception is thrown it is bubbled upwards in
