@@ -180,13 +180,18 @@
 ; Change this so it returns a map instead. Also change
 ; the client/lockstep-session function to account for this change
 (defn recv-data
-  "Receives a DATA packet from the socket, returning the data and a boolean
-  indicating whether there will be more packets following it."
+  "Receives a DATA packet from the socket, returning a mapping containing
+  the details of the packet:
+    :Block   - the block #
+    :Data    - the body of the message
+    :more?   - boolean indicating whether more packets will follow
+    :TID     - transfer ID (i.e. port #)
+    :address - the address the packet was received from"
   ([socket]
      (recv-data socket (datagram-packet (byte-array DATA-SIZE))))
   ([socket packet]
-     (let [msg (recv socket packet)
-           contents (decode data-encoding msg)
+     (let [msg (.getData (recv socket packet))
+           contents (decode data-encoding [msg])
            data (:Data contents)
            more? (= (count data) BLOCK-SIZE)
            block (:Block contents)]
@@ -209,6 +214,16 @@
          {:Block (:Block contents),
           :TID (.getPort packet),
           :address (.getAddress packet)}))))
+
+(defn recv-blocknum
+  "Same as recv-data, but throws an Exception if the received packet has
+  the wrong block #"
+  ([socket packet block]
+     (let [{:keys [Block] :as msg}
+           (recv-data socket packet)]
+       (if (= Block block)
+         msg
+         (throw (new Exception "Packet received with incorrect block #"))))))
 
 (defn socket
   "Constructs a DatagramSocket."

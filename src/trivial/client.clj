@@ -1,6 +1,7 @@
 (ns trivial.client
   (:require [trivial.tftp :as tftp]
-            [trivial.util :as util])
+            [trivial.util :as util]
+            [trivial.util :refer [dbg verbose]])
   (:import [java.net Inet4Address Inet6Address SocketTimeoutException]))
 
 (defn IPv4-address
@@ -14,9 +15,10 @@
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
   ([url server]
-     (let [address (.getInetAddress server)
-           port (.getPort server)
+     (let [address (.getLocalAddress server)
+           port (.getLocalPort server)
            rrq-packet (tftp/rrq-packet url address port)
+           data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            send-rrq #(.send server rrq-packet)]
        (try
          ; there's probably some off-by-one errors in the block #'s
@@ -30,7 +32,9 @@
                  (util/try-callback-times tftp/*retries*
                                           callback
                                           true
-                                          (tftp/recv-data server (inc block)))]
+                                          (tftp/recv-blocknum server
+                                                              data-packet
+                                                              (inc block)))]
              (if (and (pos? block)
                       (not= block Block))
                (recur block)
@@ -55,9 +59,11 @@
   ([url options]
      (let [hostname (:hostname options)
            port (:port options)
-           ip-fn (if (:IPv6 options) IPv6-address IPv4-address)
+           ip-fn (if (:IPv6? options) IPv6-address IPv4-address)
            address (ip-fn hostname)
+           ; LOOK AT THE DEBUG OUTPUT!!!
            server (tftp/socket tftp/*timeout* port address)
+           _ (println "but maybe im wrong")
            sliding? (:sliding-window options)
            session-fn (if sliding? sliding-session lockstep-session)]
        (session-fn url server))))
