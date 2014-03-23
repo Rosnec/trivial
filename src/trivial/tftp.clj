@@ -63,7 +63,7 @@
   (ordered-map
    :Opcode DATA,
    :Block :int16,
-   :Data open-string))
+   :Data octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
@@ -140,6 +140,10 @@
        (throw (new SocketException "Dropping packet."))
        (.receive socket packet))
      packet))
+
+(defn recv-stream
+  "Receives a stream"
+  ([socket packet] nil))
 
 (defn recv-request
   "Receives a request (RRQ or SRQ) packet from the socket, returning the mapping
