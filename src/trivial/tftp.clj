@@ -2,7 +2,7 @@
   (:require [gloss.core :refer [defcodec ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode]]
             [trivial.util :as util])
-  (:import [java.net DatagramPacket DatagramSocket SocketException]))
+  (:import [java.net DatagramPacket DatagramSocket SocketTimeoutException]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
@@ -62,26 +62,19 @@
 (defcodec data-encoding
   (ordered-map
    :Opcode DATA,
-   :Block :int16,
+   :Block :uint16,
    :Data octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
    :Opcode ACK,
-   :Block :int16))
+   :Block :uint16))
 ; error
 (defcodec error-encoding
   (ordered-map
    :Opcode ERROR,
-   :ErrorCode :int16,
+   :ErrorCode :uint16,
    :ErrMsg delimited-string))
-
-; Probably unnecessary, since making a socket without specifying a
-; port causes it to pick a port in the interval [0x0 0x10000)
-(defn transfer-identifier
-  "Randomly generates a transfer-identifier, which can be any number
-  between 0 and 65535."
-  ([] (rand-int 0x10000)))
 
 (defn datagram-packet
   "Constructs a DatagramPacket.
@@ -137,7 +130,7 @@
   "Receives a packet"
   ([socket packet]
      (if (and *drop* (util/prob 0.01))
-       (throw (new SocketException "Dropping packet."))
+       (throw (new SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
      packet))
 
@@ -162,24 +155,6 @@
           :address (.getAddress packet),
           :sliding? (= SRQ (:Opcode contents))}
          (throw (Exception. "Non-request packet received."))))))
-
-(defn recv-rrq
-  "Receives an RRQ packet from the socket, returning a map containing:
-    :Filename - the name of the requested file
-    :TID      - the Transfer ID of the sender (i.e. the port #)
-    :address  - the address of the sender
-  Throws a SocketException if a timeout occurs.
-  Throws an Exception if the wrong kind of packet is received."
-  ([socket]
-     (recv-rrq socket (datagram-packet (byte-array 4))))
-  ([socket packet]
-     (let [msg (recv socket packet)
-           contents (decode rrq-encoding msg)]
-       (if (= (:Opcode contents) RRQ)
-         {:Filename (:Filename contents),
-          :TID (.getPort packet),
-          :address (.getAddress packet)}
-         (throw (Exception. "Non-RRQ packet received."))))))
 
 ; Change this so it returns a map instead. Also change
 ; the client/lockstep-session function to account for this change
