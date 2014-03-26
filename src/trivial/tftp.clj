@@ -127,12 +127,54 @@
                       address port)))
 
 (defn recv
-  "Receives a packet"
+  "Receives a packet. If *drop* is true, has a 1% probability of dropping
+  the packet and throwing a timeout exception.
+  If an address and TID are given, only accepts the packet if its address
+  and TID match the given ones.
+  Throws a SocketTimeoutException if it times out, and returns an empty map
+  if no valid packet is received. Might want to change this to throw a custom
+  NoValidPacketException."
   ([socket packet]
      (if (and *drop* (util/prob 0.01))
        (throw (new SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
-     packet))
+     (let [length (.getLength packet)
+           ; might have to use different methods (e.g. getLocalAddress)
+           address (.getAddress packet)
+           port (.getPort packet)
+           buffer (to-byte-buffer (.getData packet))
+           type (.getShort buffer)
+           decoder (case type
+                     RRQ   rrq-encoding
+                     SRQ   srq-encoding
+                     DATA  data-encoding
+                     ACK   ack-encoding
+                     ERROR error-encoding
+                     :default nil)]
+       (if decoder
+         ; return the decoded packet if it is one of the defined types
+         ; includes the sender's address and port, as well as the length
+         ; of the data in the packet
+         (assoc (decode decoder (.rewind buffer))
+           :address address,
+           :TID port,
+           :length length)
+         ; send a malformed packet error back to the sender and return nil
+         (do (.send socket (error-packet ILLEGAL-OPERATION
+                                         (str "No such Optcode " type)
+                                         address
+                                         port))
+             {}))))
+  ([socket packet address TID]
+     (let [packet (recv socket packet)]
+       (cond
+        (and (= (:address packet) address) (= (:TID packet) TID)) packet
+        (empty? packet) packet
+        :default (do (.send socket (error-packet UNKNOWN-TID
+                                                 "Who are you?"
+                                                 (:address packet)
+                                                 (:TID packet)))
+                     {})))))
 
 (defn recv-stream
   "Receives a stream"

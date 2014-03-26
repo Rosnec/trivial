@@ -62,7 +62,8 @@
            ip-fn (if (:IPv6? options) IPv6-address IPv4-address)
            address (ip-fn hostname)
            ; LOOK AT THE DEBUG OUTPUT!!!
-           server (tftp/socket tftp/*timeout* port address)
+;           server (tftp/socket tftp/*timeout* port address)
+           server (tftp/socket tftp/*timeout*)
            _ (println "but maybe im wrong")
            sliding? (:sliding-window options)
            session-fn (if sliding? sliding-session lockstep-session)]
