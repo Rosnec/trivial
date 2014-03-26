@@ -2,7 +2,8 @@
   (:require [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
-  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]))
+  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]
+           [java.nio.file Files]))
 
 (defn IPv4-address
   "Returns an InetAddress wrapper around the address using IPv4"
@@ -21,6 +22,7 @@
            data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            send-rrq #(.send server rrq-packet)]
        (try
+         (send-rrq)
          ; there's probably some off-by-one errors in the block #'s
          (loop [block 0]
            (let [callback (if (zero? block)
@@ -28,23 +30,17 @@
                             #(.send server (tftp/ack-packet block
                                                             address
                                                             port)))
-                 {:keys [Block Data more? TID address]}
+                 {:keys [address Block Data length more? TID]}
                  (util/try-callback-times tftp/*retries*
                                           callback
-                                          true
-                                          (tftp/recv-blocknum server
-                                                              data-packet
-                                                              (inc block)))]
-             (if (and (pos? block)
-                      (not= block Block))
-               (recur block)
-               (do (print Data)
-                   (if more?
-                     (recur (inc block))
-                     (.send server (tftp/ack-packet (inc block)
-                                                    address
-                                                    port)
-                            server))))))
+                                          (tftp/recv-data server
+                                                          data-packet
+                                                          address
+                                                          port
+                                                          (inc block)))]
+             (util/print-byte-buffer Data (/ length 2))
+             (when more?
+               (recur (inc block)))))
          (catch SocketTimeoutException e
            (util/exit 1 "Server timed out."))
          (finally
@@ -61,10 +57,7 @@
            port (:port options)
            ip-fn (if (:IPv6? options) IPv6-address IPv4-address)
            address (ip-fn hostname)
-           ; LOOK AT THE DEBUG OUTPUT!!!
-;           server (tftp/socket tftp/*timeout* port address)
            server (tftp/socket tftp/*timeout*)
-           _ (println "but maybe im wrong")
            sliding? (:sliding-window options)
            session-fn (if sliding? sliding-session lockstep-session)]
        (session-fn url server))))

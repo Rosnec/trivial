@@ -1,8 +1,10 @@
 (ns trivial.tftp
   (:require [gloss.core :refer [defcodec ordered-map repeated string]]
-            [gloss.io :refer [contiguous decode encode]]
+            [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util])
-  (:import [java.net DatagramPacket DatagramSocket SocketTimeoutException]))
+  (:import [java.net DatagramPacket DatagramSocket SocketTimeoutException]
+           [util.java BlockNumberException MalformedPacketException
+                      UnknownSenderException]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
@@ -144,37 +146,58 @@
            port (.getPort packet)
            buffer (to-byte-buffer (.getData packet))
            type (.getShort buffer)
-           decoder (case type
-                     RRQ   rrq-encoding
-                     SRQ   srq-encoding
-                     DATA  data-encoding
-                     ACK   ack-encoding
-                     ERROR error-encoding
-                     :default nil)]
-       (if decoder
+           encoding (case type
+                      RRQ   rrq-encoding
+                      SRQ   srq-encoding
+                      DATA  data-encoding
+                      ACK   ack-encoding
+                      ERROR error-encoding
+                      nil)]
+       (if encoding
          ; return the decoded packet if it is one of the defined types
          ; includes the sender's address and port, as well as the length
          ; of the data in the packet
-         (assoc (decode decoder (.rewind buffer))
+         (assoc (decode encoding (.rewind buffer))
            :address address,
            :TID port,
            :length length)
          ; send a malformed packet error back to the sender and return nil
-         (do (.send socket (error-packet ILLEGAL-OPERATION
-                                         (str "No such Optcode " type)
-                                         address
-                                         port))
-             {}))))
+         (do
+           (.send socket (error-packet ILLEGAL-OPERATION
+                                       (str "No such Opcode " type)
+                                       address
+                                       port))
+           (throw (new MalformedPacketException
+                       (str "Received malformed packet: "
+                            packet)))))))
   ([socket packet address TID]
      (let [packet (recv socket packet)]
-       (cond
-        (and (= (:address packet) address) (= (:TID packet) TID)) packet
-        (empty? packet) packet
-        :default (do (.send socket (error-packet UNKNOWN-TID
-                                                 "Who are you?"
-                                                 (:address packet)
-                                                 (:TID packet)))
-                     {})))))
+       (if (and (= (:address packet) address) (= (:TID packet) TID))
+         packet
+         (let [{:keys [address TID]} packet]
+           (.send socket (error-packet UNKNOWN-TID
+                                       "Who are you?"
+                                       address
+                                       TID))
+           (throw (new UnknownSenderException
+                       (str "Packet received from " address
+                            " on port " TID))))))))
+
+(defn recv-data
+  "Receives a data packet from the given address and port. The packet must
+  have Opcode DATA, and its block # must match the given one, or else an
+  Exception is thrown."
+  ([socket packet address TID block]
+     (let [{:keys [Block length] :as packet}
+           (recv socket packet address TID)]
+       (if (= Block block)
+         (do
+           (.send socket (ack-packet block address TID))
+           (assoc packet
+             :more? (= length BLOCK-SIZE)))
+         (throw (new BlockNumberException
+                     (str "Expected Block # " block
+                          ", received Block # " Block)))))))
 
 (defn recv-stream
   "Receives a stream"
@@ -197,31 +220,6 @@
           :address (.getAddress packet),
           :sliding? (= SRQ (:Opcode contents))}
          (throw (Exception. "Non-request packet received."))))))
-
-; Change this so it returns a map instead. Also change
-; the client/lockstep-session function to account for this change
-(defn recv-data
-  "Receives a DATA packet from the socket, returning a mapping containing
-  the details of the packet:
-    :Block   - the block #
-    :Data    - the body of the message
-    :more?   - boolean indicating whether more packets will follow
-    :TID     - transfer ID (i.e. port #)
-    :address - the address the packet was received from"
-  ([socket]
-     (recv-data socket (datagram-packet (byte-array DATA-SIZE))))
-  ([socket packet]
-     (let [msg (.getData (recv socket packet))
-           contents (decode data-encoding [msg])
-           data (:Data contents)
-           more? (= (count data) BLOCK-SIZE)
-           block (:Block contents)]
-       (if (= (:Opcode contents) DATA)
-         {:Block block,
-          :Data data,
-          :more? more?,
-          :TID (.getPort packet),
-          :address (.getAddress packet)}))))
 
 (defn recv-slide
   "Receives a SLIDE packet from the socket, returning the data and a boolean

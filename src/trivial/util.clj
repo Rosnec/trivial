@@ -33,6 +33,11 @@
   "When *verbose* is true, outputs body to stderr."
   ([& more] (when *verbose* (apply println-err more))))
 
+(defn print-byte-buffer
+  "Prints n chars from a byte buffer to *out*."
+  ([buf n] (dotimes [_ n]
+             (print (.getChar buf)))))
+
 (defn prob
   "Returns x with probability p, else returns y (or nil if not given)."
   ([p] (prob p p nil))

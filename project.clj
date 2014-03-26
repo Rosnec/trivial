@@ -10,4 +10,5 @@
                  [gloss "0.2.2"]]
   :jar-name "trivial.jar"
   :uberjar-name "trivial-standalone.jar"
+  :java-source-paths ["src/util/java/"]
   :main trivial.core)
