@@ -2,8 +2,7 @@
   (:require [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
-  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]
-           [java.nio.file Files]))
+  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]))
 
 (defn IPv4-address
   "Returns an InetAddress wrapper around the address using IPv4"
@@ -15,24 +14,23 @@
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
-  ([url server]
-     (let [address (.getLocalAddress server)
-           port (.getLocalPort server)
-           rrq-packet (tftp/rrq-packet url address port)
+  ([url server address port]
+     (let [rrq-packet (tftp/rrq-packet url address port)
            data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           send-rrq #(.send server rrq-packet)]
+           send-rrq #(dbg (.send server rrq-packet))]
        (try
          (send-rrq)
          ; there's probably some off-by-one errors in the block #'s
          (loop [block 0]
            (let [callback (if (zero? block)
                             send-rrq
-                            #(.send server (tftp/ack-packet block
-                                                            address
-                                                            port)))
+                            #(dbg (.send server (tftp/ack-packet block
+                                                                 address
+                                                                 port))))
                  {:keys [address Block Data length more? TID]}
                  (util/try-callback-times tftp/*retries*
                                           callback
+                                          false
                                           (tftp/recv-data server
                                                           data-packet
                                                           address
@@ -60,4 +58,4 @@
            server (tftp/socket tftp/*timeout*)
            sliding? (:sliding-window options)
            session-fn (if sliding? sliding-session lockstep-session)]
-       (session-fn url server))))
+       (session-fn url server address port))))
