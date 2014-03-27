@@ -140,12 +140,12 @@
      (if (and *drop* (util/prob 0.01))
        (throw (new SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
-     (let [length (.getLength packet)
+     (let [length (util/dbg (.getLength packet))
            ; might have to use different methods (e.g. getLocalAddress)
-           address (.getAddress packet)
-           port (.getPort packet)
+           address (util/dbg (.getAddress packet))
+           port (util/dbg (.getPort packet))
            buffer (to-byte-buffer (.getData packet))
-           type (.getShort buffer)
+           type (util/dbg (.getShort buffer))
            encoding (case type
                       RRQ   rrq-encoding
                       SRQ   srq-encoding
