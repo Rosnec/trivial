@@ -4,7 +4,8 @@
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
   (:import [java.io FileNotFoundException IOException]
-           [java.net InetAddress SocketException SocketTimeoutException URL]))
+           [java.net InetAddress SocketException SocketTimeoutException URL]
+           [util.java UnwantedPacketException]))
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
