@@ -4,7 +4,7 @@
             [trivial.util :as util])
   (:import [java.net DatagramPacket DatagramSocket SocketTimeoutException]
            [util.java BlockNumberException MalformedPacketException
-                      UnknownSenderException]))
+                      UnknownSenderException UnwantedPacketException]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
@@ -188,61 +188,28 @@
   have Opcode DATA, and its block # must match the given one, or else an
   Exception is thrown."
   ([socket packet address TID block]
-     (let [{:keys [Block length] :as packet}
+     (let [{:keys [Block length Opcode] :as packet}
            (recv socket packet address TID)]
-       (if (= Block block)
-         (do
-           (.send socket (ack-packet block address TID))
-           (assoc packet
-             :more? (= length BLOCK-SIZE)))
-         (throw (new BlockNumberException
+       (cond
+        (not= Opcode DATA) (throw (new UnwantedPacketException
+                                       "Expecting DATA packet."))
+        (= Block block) (do
+                          (.send socket (ack-packet block address TID))
+                          (assoc packet
+                            :more? (= length BLOCK-SIZE)))
+        :default (throw (new BlockNumberException
                      (str "Expected Block # " block
                           ", received Block # " Block)))))))
 
-(defn recv-stream
-  "Receives a stream"
-  ([socket packet] nil))
-
 (defn recv-request
-  "Receives a request (RRQ or SRQ) packet from the socket, returning the mapping
-    :Filename - the name of the requested file
-    :TID      - the Transfer ID of the sender (i.e. the port #)
-    :address  - the address of the sender
-    :sliding? - whether or not to use sliding-window
-  Throws a SocketException if a timeout occurs.
-  Throws an Exception if the wrong kind of packet is received."
+  "Receives a request (RRQ or SRQ) packet from the socket."
   ([socket packet]
-     (let [msg (recv socket packet)
-           contents (decode rrq-encoding msg)]
-       (if ([RRQ SRQ] (:Opcode contents))
-         {:Filename (:Filename contents),
-          :TID (.getPort packet),
-          :address (.getAddress packet),
-          :sliding? (= SRQ (:Opcode contents))}
-         (throw (Exception. "Non-request packet received."))))))
-
-(defn recv-slide
-  "Receives a SLIDE packet from the socket, returning the data and a boolean
-  indicating whether there will be more packets following it."
-  ([socket]
-     (recv-data socket (datagram-packet (byte-array DATA-SIZE))))
-  ([socket packet]
-     (let [msg (recv socket packet)
-           contents (decode data-encoding msg)]
-       (if (= (:Opcode contents) DATA)
-         {:Block (:Block contents),
-          :TID (.getPort packet),
-          :address (.getAddress packet)}))))
-
-(defn recv-blocknum
-  "Same as recv-data, but throws an Exception if the received packet has
-  the wrong block #"
-  ([socket packet block]
-     (let [{:keys [Block] :as msg}
-           (recv-data socket packet)]
-       (if (= Block block)
-         msg
-         (throw (new Exception "Packet received with incorrect block #"))))))
+     (let [{:keys [Opcode] :as packet}
+           (recv socket packet)]
+       (if (or (= Opcode RRQ) (= Opcode SRQ))
+         packet
+         (throw (new UnwantedPacketException
+                     "Expecting RRQ or SRQ packet."))))))
 
 (defn socket
   "Constructs a DatagramSocket."

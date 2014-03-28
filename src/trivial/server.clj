@@ -36,8 +36,9 @@
         socket []
         (let [{:keys [Filename TID address sliding?] :as msg}
               (try
-                (tftp/recv-request socket packet)
-                (util/verbose "Received request")
+                (let [msg (tftp/recv-request socket packet)]
+                  (util/verbose "Received request")
+                  msg)
                 (catch SocketTimeoutException e
                   {})
                 (catch Exception e
