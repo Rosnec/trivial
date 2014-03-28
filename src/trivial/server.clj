@@ -41,13 +41,12 @@
                   msg)
                 (catch SocketTimeoutException e
                   {})
-                (catch Exception e
+                (catch UnwantedPacketException e
                   (util/verbose e)
                   (util/verbose (str "Illegal Optcode: "
                                      (.getMessage e)))
                   (optcode-error)
                   {}))
-
               session-fn (if sliding? sliding-session lockstep-session)]
           (when (not (empty? msg))
             (printf "You shouldn't be here!")

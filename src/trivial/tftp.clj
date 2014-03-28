@@ -192,7 +192,8 @@
            (recv socket packet address TID)]
        (cond
         (not= Opcode DATA) (throw (new UnwantedPacketException
-                                       "Expecting DATA packet."))
+                                       (str "Expecting DATA packet, received "
+                                            Opcode)))
         (= Block block) (do
                           (.send socket (ack-packet block address TID))
                           (assoc packet
@@ -209,7 +210,8 @@
        (if (or (= Opcode RRQ) (= Opcode SRQ))
          packet
          (throw (new UnwantedPacketException
-                     "Expecting RRQ or SRQ packet."))))))
+                     (str "Expecting RRQ or SRQ packet, received "
+                          Opcode)))))))
 
 (defn socket
   "Constructs a DatagramSocket."
