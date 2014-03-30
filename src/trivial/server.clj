@@ -61,6 +61,7 @@
                          :unwanted-opcode 
                          nil))
                      {}))]
+             (println "msg:" msg)
              (when (and (not (empty? msg))
                         address
                         port)
