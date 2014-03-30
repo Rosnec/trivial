@@ -61,17 +61,18 @@
                          :unwanted-opcode 
                          nil))
                      {}))]
-             (if (contains? [RRQ SRQ] opcode)
-               (let [sliding-window? (= opcode SRQ)
-                     session-fn (if sliding-window?
-                                  sliding-session
-                                  lockstep-session)]
-                 (try
-                   (with-open [stream (input-stream filename)]
-                     (session-fn stream socket address port))))
-               (do
-                 (verbose "Non-request packet received:" msg)
-                 (error-opcode-req opcode
-                                   address
-                                   port))))
+             (when (not (empty? msg))
+               (if (contains? [RRQ SRQ] opcode)
+                 (let [sliding-window? (= opcode SRQ)
+                       session-fn (if sliding-window?
+                                    sliding-session
+                                    lockstep-session)]
+                   (try
+                     (with-open [stream (input-stream filename)]
+                       (session-fn stream socket address port))))
+                 (do
+                   (verbose "Non-request packet received:" msg)
+                   (error-opcode-req opcode
+                                     address
+                                     port)))))
            (recur))))))
