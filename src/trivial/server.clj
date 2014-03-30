@@ -61,7 +61,9 @@
                          :unwanted-opcode 
                          nil))
                      {}))]
-             (when (not (empty? msg))
+             (when (and (not (empty? msg))
+                        address
+                        port)
                (if (contains? [RRQ SRQ] (dbg opcode))
                  (let [sliding-window? (= opcode SRQ)
                        session-fn (if sliding-window?

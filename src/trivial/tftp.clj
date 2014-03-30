@@ -63,18 +63,18 @@
 (defcodec data-encoding
   (ordered-map
    :opcode DATA,
-   :block :uint16,
+   :block :int16,
    :data octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
    :opcode ACK,
-   :block :uint16))
+   :block :int16))
 ; error
 (defcodec error-encoding
   (ordered-map
    :opcode ERROR,
-   :error-code :uint16,
+   :error-code :int16,
    :error-msg delimited-string))
 
 (defn datagram-packet
