@@ -48,6 +48,10 @@
                    (catch clojure.lang.ExceptionInfo e
                      (let [{:keys [cause packet]} (ex-data e)
                            {:keys [address opcode port url]} packet]
+                       (println "address" address
+                                ",opcode" opcode
+                                ",port"   port
+                                ",url"    url)
                        (verbose (.getMessage e))
                        (case cause
                          :malformed (error-malformed address port)
