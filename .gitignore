@@ -1,10 +1,12 @@
 pom.xml
 *jar
+*.log
 /lib/
 /classes/
 /target/
 /targets/
 .lein-deps-sum
+.lein-repl-history
 *~
 \#*\#
 .\#*

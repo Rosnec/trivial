@@ -22,7 +22,7 @@
 (defn start
   ([options]
      (let [port (:port options)
-           socket (tftp/socket port)
+           socket (tftp/socket tftp/*timeout* port)
            packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            error (fn error [code msg]
                    (.send socket
@@ -42,6 +42,9 @@
                   msg)
                 (catch SocketTimeoutException e
                   {})
+                (catch MalformedPacketException e
+                  (util/verbose (.getMessage e))
+                  {})
                 (catch UnwantedPacketException e
                   (util/verbose e)
                   (util/verbose (str "Illegal Optcode: "
@@ -49,8 +52,11 @@
                   (optcode-error)
                   {}))
               session-fn (if sliding? sliding-session lockstep-session)]
-          (when (not (empty? msg))
-            (printf "You shouldn't be here!")
+          (when-let [session-fn (and (not (empty? msg))
+                                     (if sliding?
+                                       sliding-session
+                                       lockstep-session))]
+            (println "You shouldn't be here!")
             (try
               (with-open [stream (input-stream Filename)]
                 (session-fn stream socket))

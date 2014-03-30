@@ -6,11 +6,11 @@
 
 (defn IPv4-address
   "Returns an InetAddress wrapper around the address using IPv4"
-  ([address] (Inet4Address/getByName address)))
+  ([address] (dbg (Inet4Address/getByName address))))
 
 (defn IPv6-address
   "Returns an InetAddress wrapper around the address using IPv6"
-  ([address] (Inet6Address/getByName address)))
+  ([address] (dbg (Inet6Address/getByName address))))
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."

@@ -5,6 +5,18 @@
 ; Verbose flag
 (def ^:dynamic *verbose* false)
 
+(defmacro assert-args
+  {:private true}
+  ([& pairs]
+     `(do (when-not ~(first pairs)
+            (throw (IllegalArgumentException.
+                    (str (first ~'&form) " requires "
+                         ~(second pairs) " in " ~'*ns* ":"
+                         (:line (meta ~'&form))))))
+          ~(let [more (nnext pairs)]
+             (when more
+               (list* `assert-args more))))))
+
 (defmacro dbg
   "Executes the expression x, then prints the expression and its output to
   stderr, while also returning value.
@@ -108,6 +120,72 @@
   upwards in the call chain."
   [n callback initial? & body]
   `(try-callback-times* ~n ~callback ~initial? (fn [] ~@body)))
+
+(comment (defn try-catch-times*
+
+           ([n catch exception thunk]
+              (loop [remaining n]
+                (if-let [result (try
+                                  [(thunk)]
+                                  (catch exception e
+                                    (if (zero? remaining)
+                                      (throw e)
+                                      (callback))))])))))
+
+(defmacro try-timez
+  [n func & catch-finally]
+  `(loop [remaining# ~n]
+     (if-let [result# (try [(~func)] ~@catch-finally)]
+       (first result#)
+       (recur (dec remaining#)))))
+
+(defmacro catch-throw
+  "Builds up a vector of catch clauses from the except-response pairs.
+  An except-response pair (excresp) takes the form
+    [e (fn [e])]
+  where e is an exception and (fn [e]) is a single argument function which is
+  called with e if e is caught."
+  {:private true}
+  ([n & excresps]
+     (loop [excepts (partition 2 excresps)
+            catches []]
+       (println excepts)
+       (if-let [[exception func] (first excepts)]
+         (do
+           (println "eyyo")
+           (recur (next excepts)
+                  (conj catches `(catch ~exception e#
+                                        ; call func before throwing exception,
+                                        ; in case func has side effects
+                                   (~func e#)
+                                   (when (zero? ~n)
+                                     (throw e#))))))
+         catches))))
+
+
+
+(defmacro try-timesies
+  "Tries to call func n times. Takes any number of exception-expr pairs,
+  which consist of the exception to catch, and a function of that exception to
+  call when the exception is caught.
+   
+    "
+  ([n func & except-funcs]
+     `(loop [remaining# ~n]
+        (if-let [result#
+                 (try
+                   [(~func)]
+                   ~@(loop [excepts (partition 2 except-funcs)
+                            catches []]
+                       (if-let [[exception func] (first excepts)]
+                         (recur (next excepts)
+                                (conj catches (list 'catch '~exception 'e
+                                                 '('~func 'e)
+                                                 ('when ('zero? '~n)
+                                                   ('throw 'e)))))
+                         catches)))]
+          (first result#)
+          (recur (dec remaining#))))))
 
 (defmacro buffers->bytes
   "Takes a sequence of ByteBuffers and returns a single contiguous byte-array."
