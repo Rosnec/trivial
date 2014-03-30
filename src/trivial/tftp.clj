@@ -50,20 +50,20 @@
 ; read request
 (defcodec rrq-encoding
   (ordered-map
-   :opcode RRQ,
+   :opcode :int16-be,
    :filename delimited-string,
    :mode octet-mode))
 ; sliding request
 (defcodec srq-encoding
   (ordered-map
-   :opcode SRQ,
+   :opcode :int16-be,
    :filename delimited-string,
    :mode octet-mode))
 ; data
 (defcodec data-encoding
   (ordered-map
    :opcode DATA,
-   :block :int16,
+   :block :int16-be,
    :data octet))
 ; acknowledgement
 (defcodec ack-encoding
@@ -92,14 +92,16 @@
   "Create an RRQ packet."
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode rrq-encoding
-                                                   {:filename filename}))
+                                                   {:opcode RRQ
+                                                    :filename filename}))
                       address port)))
 
 (defn srq-packet
   "Create an SRQ packet."
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode srq-encoding
-                                                   {:Filename filename}))
+                                                   {:opcode SRQ
+                                                    :Filename filename}))
                       address port)))
 
 (defn data-packet
