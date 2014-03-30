@@ -1,49 +1,15 @@
 (ns trivial.client
   (:require [trivial.tftp :as tftp]
             [trivial.util :as util]
-            [trivial.util :refer [dbg verbose]])
-  (:import [java.net Inet4Address Inet6Address SocketTimeoutException]))
+            [trivial.util :refer [dbg verbose]]))
 
 (defn IPv4-address
   "Returns an InetAddress wrapper around the address using IPv4"
-  ([address] (Inet4Address/getByName address)))
+  ([address] (java.net.Inet4Address/getByName address)))
 
 (defn IPv6-address
   "Returns an InetAddress wrapper around the address using IPv6"
-  ([address] (Inet6Address/getByName address)))
-
-(comment
-  (defn lockstep-session
-    "Runs a session with the provided proxy server using lockstep."
-    ([url server address port]
-       (let [rrq-packet (tftp/rrq-packet url address port)
-             data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-             send-rrq #(dbg (.send server rrq-packet))]
-         (try
-           (send-rrq)
-           ; there's probably some off-by-one errors in the block #'s
-           (loop [block 0]
-             (let [callback (if (zero? block)
-                              send-rrq
-                              #(dbg (.send server (tftp/ack-packet block
-                                                                   address
-                                                                   port))))
-                   {:keys [address Block Data length more? TID]}
-                   (util/try-callback-times tftp/*retries*
-                                            callback
-                                            false
-                                            (tftp/recv-data server
-                                                            data-packet
-                                                            address
-                                                            port
-                                                            (inc block)))]
-               (util/print-byte-buffer Data (/ length 2))
-               (when more?
-                 (recur (inc block)))))
-           (catch SocketTimeoutException e
-             (util/exit 1 "Server timed out."))
-           (finally
-             (.close server)))))))
+  ([address] (java.net.Inet6Address/getByName address)))
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
@@ -58,10 +24,10 @@
                                    (tftp/ack-packet block
                                                     server-address
                                                     server-port))))
-           error-opcode    (partial tftp/error-opcode socket)
-           error-malformed (partial tftp/error-malformed socket)
-           error-not-found (partial tftp/error-not-found socket)
-           error-tid       (partial tftp/error-tid socket)
+           error-opcode-unknown (partial tftp/error-opcode-unknown socket)
+           error-malformed      (partial tftp/error-malformed socket)
+           error-not-found      (partial tftp/error-not-found socket)
+           error-tid            (partial tftp/error-tid socket)
            timeout-ns (* timeout 1000000000)]
        (util/with-connection socket
          (loop [last-block     0
@@ -85,7 +51,9 @@
                        (verbose (.getMessage e))
                        (case cause
                          :malformed (error-malformed address port)
-                         :unknown-opcode (error-opcode opcode address port)
+                         :unknown-opcode (error-opcode-unknown opcode
+                                                               address
+                                                               port)
                          :unknown-sender (error-tid address port)
                          nil))
                      {:retry? true}))]
@@ -122,7 +90,7 @@
 
 (defn sliding-session
   "Runs a session with the provided proxy server using sliding window."
-  ([url server]
+  ([url socket server-address server-port timeout]
      nil))
 
 (defn start

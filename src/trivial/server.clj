@@ -1,11 +1,11 @@
 (ns trivial.server
   (:require [clojure.java.io :refer [input-stream]]
             [trivial.tftp :as tftp]
+            [trivial.tftp :refer [RRQ SRQ ACK DATA ERROR]]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
   (:import [java.io FileNotFoundException IOException]
-           [java.net InetAddress SocketException SocketTimeoutException URL]
-           [util.java UnwantedPacketException]))
+           [java.net InetAddress SocketException SocketTimeoutException URL]))
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
@@ -16,7 +16,7 @@
   ([stream socket]
      (comment
        (loop [panorama (partition tftp/*window-size* 1 packets)]
-         (let [num-received ...]
+         (let [num-received 1]
            (recur (nthrest num-received panorama)))))))
 
 (defn start

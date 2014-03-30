@@ -2,7 +2,8 @@
   (:require [gloss.core :refer [defcodec ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util])
-  (:import [java.net DatagramPacket DatagramSocket]))
+  (:import [java.net DatagramPacket DatagramSocket])
+  (:refer-clojure :exclude [send]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
@@ -105,7 +106,7 @@
   "Create a DATA packet."
   ([block data address port]
      (when (> (count data) BLOCK-SIZE)
-       (throw (Exception. "Oversized block of data.")))
+       (throw (ex-info "Oversized block of data." {:cause :block-size})))
      (datagram-packet (util/buffers->bytes (encode data-encoding
                                                    {:block block,
                                                     :Data data}))
