@@ -82,20 +82,20 @@
                    (catch clojure.lang.ExceptionInfo e
                      (let [{:keys [cause packet]} (ex-data e)
                            {:keys [address opcode port url]} packet]
+                       (verbose (.getMessage e))
                        (case cause
                          :malformed (error-malformed address port)
                          :unknown-opcode (error-opcode opcode address port)
                          :unknown-sender (error-tid address port)
-                         nil)
-                       {:retry? true})))]
+                         nil))
+                     {:retry? true}))]
              (cond
               (and (or retry?
                        (not= block expected-block)
                        (not= address server-address)
                        (not= port server-port))
                    (> time-limit (System/nanoTime)))
-              (do
-                (recur last-block expected-block file-chunks time-limit))
+              (recur last-block expected-block file-chunks time-limit)
 
               (= block expected-block)
               (if (= length tftp/DATA-SIZE)

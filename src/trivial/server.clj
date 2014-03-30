@@ -9,11 +9,11 @@
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
-  ([stream client]))
+  ([stream socket address port] (println "yee boiii")))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
-  ([stream client]
+  ([stream socket]
      (comment
        (loop [panorama (partition tftp/*window-size* 1 packets)]
          (let [num-received ...]
@@ -24,6 +24,8 @@
      (let [{:keys [port timeout]} options
            socket (tftp/socket tftp/*timeout* port)
            packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
+           error-malformed (partial tftp/error-malformed socket)
+           error-not-found (partial tftp/error-not-found socket)
            error-opcode-unknown (partial tftp/error-opcode-unknown socket)
            error-opcode-unwanted (partial tftp/error-opcode-unwanted socket)
            error-opcode-ack (fn [opcode address port]
@@ -35,38 +37,37 @@
                               (error-opcode-unwanted opcode
                                                      [RRQ SRQ]
                                                      address
-                                                     port))
-
-           file-not-found #(str "File " % " not found.")
-           file-not-found-error #(error tftp/FILE-NOT-FOUND (file-not-found %))]
+                                                     port))]
        (util/with-connection socket
          (loop []
-           (let [{:keys [Filename TID address sliding?] :as msg}
+           (let [{:keys [address filename length mode opcode port] :as msg}
                  (try
-                   (let [msg (tftp/recv-request socket packet)]
-                     (util/verbose "Received request")
-                     msg)
-                   (catch SocketTimeoutException e
+                   (tftp/recv socket packet)
+                   (catch java.net.SocketTimeoutException e
                      {})
-                   (catch MalformedPacketException e
-                     (util/verbose (.getMessage e))
-                     {})
-                   (catch UnwantedPacketException e
-                     (util/verbose e)
-                     (util/verbose (str "Illegal Optcode: "
-                                        (.getMessage e)))
-                     (optcode-error)
-                     {}))
-                 session-fn (if sliding? sliding-session lockstep-session)]
-             (when-let [session-fn (and (not (empty? msg))
-                                        (if sliding?
-                                          sliding-session
-                                          lockstep-session))]
-               (println "You shouldn't be here!")
-               (try
-                 (with-open [stream (input-stream Filename)]
-                   (session-fn stream socket))
-                 (catch FileNotFoundException e
-                   (util/verbose (str "File " Filename " not found."))
-                   (file-not-found-error Filename))))
-             (recur)))))))
+                   (catch clojure.lang.ExceptionInfo e
+                     (let [{:keys [cause packet]} (ex-data e)
+                           {:keys [address opcode port url]} packet]
+                       (verbose (.getMessage e))
+                       (case cause
+                         :malformed (error-malformed address port)
+                         :unknown-opcode (error-opcode-unknown opcode
+                                                               address
+                                                               port)
+                         :unwanted-opcode 
+                         nil))
+                     {}))]
+             (if (contains? [RRQ SRQ] opcode)
+               (let [sliding-window? (= opcode SRQ)
+                     session-fn (if sliding-window?
+                                  sliding-session
+                                  lockstep-session)]
+                 (try
+                   (with-open [stream (input-stream filename)]
+                     (session-fn stream socket address port))))
+               (do
+                 (verbose "Non-request packet received:" msg)
+                 (error-opcode-req opcode
+                                   address
+                                   port))))
+           (recur))))))
