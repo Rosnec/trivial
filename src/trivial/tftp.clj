@@ -2,9 +2,7 @@
   (:require [gloss.core :refer [defcodec ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util])
-  (:import [java.net DatagramPacket DatagramSocket SocketTimeoutException]
-           [util.java BlockNumberException MalformedPacketException
-                      UnknownSenderException UnwantedPacketException]))
+  (:import [java.net DatagramPacket DatagramSocket]))
 
 ;; Defaults ;;
 ; default datagram timeout in ms
@@ -16,7 +14,7 @@
 ; whether or not to drop packets
 (def ^:dynamic *drop* false)
 
-;; Opcodes ;;
+;; opcodes ;;
 (def RRQ   (short 1))
 (def SRQ   (short 2)) ; replace WRQ with SRQ for sliding window reads
 (def DATA  (short 3))
@@ -51,32 +49,32 @@
 ; read request
 (defcodec rrq-encoding
   (ordered-map
-   :Opcode RRQ,
-   :Filename delimited-string,
-   :Mode octet-mode))
+   :opcode RRQ,
+   :filename delimited-string,
+   :mode octet-mode))
 ; sliding request
 (defcodec srq-encoding
   (ordered-map
-   :Opcode SRQ,
-   :Filename delimited-string,
-   :Mode octet-mode))
+   :opcode SRQ,
+   :filename delimited-string,
+   :mode octet-mode))
 ; data
 (defcodec data-encoding
   (ordered-map
-   :Opcode DATA,
-   :Block :uint16,
-   :Data octet))
+   :opcode DATA,
+   :block :uint16,
+   :data octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
-   :Opcode ACK,
-   :Block :uint16))
+   :opcode ACK,
+   :block :uint16))
 ; error
 (defcodec error-encoding
   (ordered-map
-   :Opcode ERROR,
-   :ErrorCode :uint16,
-   :ErrMsg delimited-string))
+   :opcode ERROR,
+   :error-code :uint16,
+   :error-msg delimited-string))
 
 (defn datagram-packet
   "Constructs a DatagramPacket.
@@ -93,7 +91,7 @@
   "Create an RRQ packet."
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode rrq-encoding
-                                                   {:Filename filename}))
+                                                   {:filename filename}))
                       address port)))
 
 (defn srq-packet
@@ -109,7 +107,7 @@
      (when (> (count data) BLOCK-SIZE)
        (throw (Exception. "Oversized block of data.")))
      (datagram-packet (util/buffers->bytes (encode data-encoding
-                                                   {:Block block,
+                                                   {:block block,
                                                     :Data data}))
                       address port)))
 
@@ -117,28 +115,86 @@
   "Create an ACK packet."
   ([block address port]
      (datagram-packet (util/buffers->bytes (encode ack-encoding
-                                                   {:Block block}))
+                                                   {:block block}))
                       address port)))
 
 (defn error-packet
   "Create an ERROR packet."
   ([code message address port]
      (datagram-packet (util/buffers->bytes (encode error-encoding
-                                                   {:ErrorCode code,
-                                                    :ErrMsg message}))
+                                                   {:error-code code,
+                                                    :error-msg message}))
                       address port)))
+
+(defn send
+  "Sends the packet over the socket"
+  ([socket packet] (.send socket packet)))
+
+(defn error-opcode-unknown
+  "Sends an unknown opcode error packet through the socket to the
+  specified address and port."
+  ([socket opcode address port]
+     (send socket
+           (error-packet ILLEGAL-OPERATION
+                         (str "Unknown opcode: "
+                              opcode)
+                         address
+                         port))))
+
+(defn error-opcode-unwanted
+  "Sends an unwanted opcode error through the socket to the
+  specified address and port."
+  ([socket opcode-unwanted opcode-wanted address port]
+     (send socket
+           (error-packet ILLEGAL-OPERATION
+                         (str "Unwanted opcode: "
+                              opcode-unwanted
+                              ". Want opcode(s): "
+                              opcode-wanted)
+                         address
+                         port))))
+
+(defn error-malformed
+  "Sends a malformed packet error packet through the socket to the
+  specified address and port."
+  ([socket address port]
+     (send socket
+           (error-packet UNDEFINED
+                         "Malformed packet"
+                         address
+                         port))))
+
+(defn error-not-found
+  "Sends a file not found error packet through the socket to the
+  specified address and port."
+  ([socket filename address port]
+     (send socket
+           (error-packet FILE-NOT-FOUND
+                         (str "File " filename " not found.")
+                         address
+                         port))))
+
+(defn error-tid
+  "Sends an unknown TID error packet through the socket to the
+  specified address and port."
+  ([socket address port]
+     (send socket
+           (error-packet UNKNOWN-TID
+                         (str "TID " port " not recognized.")
+                         address
+                         port))))
 
 (defn recv
   "Receives a packet. If *drop* is true, has a 1% probability of dropping
   the packet and throwing a timeout exception.
-  If an address and TID are given, only accepts the packet if its address
-  and TID match the given ones.
+  If an address and port are given, only accepts the packet if its address
+  and port match the given ones.
   Throws a SocketTimeoutException if it times out, and returns an empty map
   if no valid packet is received. Might want to change this to throw a custom
   NoValidPacketException."
   ([socket packet]
      (if (and *drop* (util/prob 0.01))
-       (throw (new SocketTimeoutException "Dropping packet."))
+       (throw (new java.net.SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
      (let [length (util/dbg (.getLength packet))
            ; might have to use different methods (e.g. getLocalAddress)
@@ -157,61 +213,53 @@
          ; return the decoded packet if it is one of the defined types
          ; includes the sender's address and port, as well as the length
          ; of the data in the packet
-         (assoc (decode encoding (.rewind buffer))
-           :address address,
-           :TID port,
+         (assoc
+             (try
+               (decode encoding (.rewind buffer))
+               (catch Exception e
+                 (throw (ex-info "Malformed packet"
+                                 {:cause :malformed}
+                                 e))))
+           :address address
+           :port port
            :length length)
-         ; send a malformed packet error back to the sender and return nil
-         (do
-           (.send socket (error-packet ILLEGAL-OPERATION
-                                       (str "No such Opcode " type)
-                                       address
-                                       port))
-           (throw (new MalformedPacketException
-                       (str "Received malformed packet: "
-                            packet)))))))
-  ([socket packet address TID]
+         (throw (ex-info "Unknown opcode"
+                         {:cause :unknown-opcode})))))
+  ([socket packet address port]
      (let [packet (recv socket packet)]
-       (if (and (= (:address packet) address) (= (:TID packet) TID))
+       (if (and (= (:address packet) address) (= (:port packet) port))
          packet
-         (let [{:keys [address TID]} packet]
-           (.send socket (error-packet UNKNOWN-TID
-                                       "Who are you?"
-                                       address
-                                       TID))
-           (throw (new UnknownSenderException
-                       (str "Packet received from " address
-                            " on port " TID))))))))
+         (let [{:keys [address port]} packet]
+           (throw (ex-info "Unknown sender"
+                           {:cause :unknown-sender
+                            :address address
+                            :port port})))))))
 
 (defn recv-data
   "Receives a data packet from the given address and port. The packet must
-  have Opcode DATA, and its block # must match the given one, or else an
+  have opcode DATA, and its block # must match the given one, or else an
   Exception is thrown."
-  ([socket packet address TID block]
-     (let [{:keys [Block length Opcode] :as packet}
-           (recv socket packet address TID)]
+  ([socket packet address port expected-block]
+     (let [{:keys [block length opcode] :as packet}
+           (recv socket packet address port)]
        (cond
-        (not= Opcode DATA) (throw (new UnwantedPacketException
-                                       (str "Expecting DATA packet, received "
-                                            Opcode)))
-        (= Block block) (do
-                          (.send socket (ack-packet block address TID))
-                          (assoc packet
-                            :more? (= length BLOCK-SIZE)))
-        :default (throw (new BlockNumberException
-                     (str "Expected Block # " block
-                          ", received Block # " Block)))))))
+        (not= opcode DATA) (throw (ex-info "Unwanted opcode"
+                                           {:cause :opcode
+                                            :opcode opcode}))
+        (not= block expected-block) (throw (ex-info "Incorrect block #"
+                                                    {:cause :block}))
+        :default (assoc packet :more? (= length BLOCK-SIZE))))))
 
 (defn recv-request
   "Receives a request (RRQ or SRQ) packet from the socket."
   ([socket packet]
-     (let [{:keys [Opcode] :as packet}
+     (let [{:keys [opcode] :as packet}
            (recv socket packet)]
-       (if (or (= Opcode RRQ) (= Opcode SRQ))
+       (if (or (= opcode RRQ) (= opcode SRQ))
          packet
-         (throw (new UnwantedPacketException
-                     (str "Expecting RRQ or SRQ packet, received "
-                          Opcode)))))))
+         (throw (ex-info "Unwanted opcode"
+                         {:cause :opcode
+                          :opcode opcode}))))))
 
 (defn socket
   "Constructs a DatagramSocket."

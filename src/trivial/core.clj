@@ -18,6 +18,11 @@
    ["-d" "--drop" "Packet drop mode"
     :id :drop?
     :default false],
+   ["-t" "--timeout TIME" "Time to drop connection (in seconds)"
+    :id :timeout
+    :default 30
+    :parse-fn #(Integer/parseInt %)
+    :validate [pos? "Must be a positive integer"]]
    ["-v" "--verbose" "Verbose"
     :id :verbose?
     :default false],

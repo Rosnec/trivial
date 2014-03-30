@@ -67,6 +67,14 @@
   ([closable bindings & body]
      `(finally-loop (.close ~closable) ~bindings ~@body)))
 
+(defmacro with-connection
+  "Evaluates the body in an implicit do. Closes the closable when an exception
+  occurs or evaluation completes."
+  ([closable & body]
+     `(try
+        ~@body
+        (finally (.close ~closable)))))
+
 (defmacro web-stream
   "Returns a BufferedReader stream from the URL."
   ([url] `(-> (.openStream ~url)

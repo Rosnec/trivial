@@ -21,46 +21,52 @@
 
 (defn start
   ([options]
-     (let [port (:port options)
+     (let [{:keys [port timeout]} options
            socket (tftp/socket tftp/*timeout* port)
            packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           error (fn error [code msg]
-                   (.send socket
-                          (tftp/error-packet code msg
-                                             (.getAddress packet)
-                                             (.getPort packet))))
-           optcode-error #(error tftp/ILLEGAL-OPERATION
-                                 "Optcode error: awaiting requests.")
+           error-opcode-unknown (partial tftp/error-opcode-unknown socket)
+           error-opcode-unwanted (partial tftp/error-opcode-unwanted socket)
+           error-opcode-ack (fn [opcode address port]
+                              (error-opcode-unwanted opcode
+                                                     [ACK ERROR]
+                                                     address
+                                                     port))
+           error-opcode-req (fn [opcode address port]
+                              (error-opcode-unwanted opcode
+                                                     [RRQ SRQ]
+                                                     address
+                                                     port))
+
            file-not-found #(str "File " % " not found.")
            file-not-found-error #(error tftp/FILE-NOT-FOUND (file-not-found %))]
-       (util/closed-loop
-        socket []
-        (let [{:keys [Filename TID address sliding?] :as msg}
-              (try
-                (let [msg (tftp/recv-request socket packet)]
-                  (util/verbose "Received request")
-                  msg)
-                (catch SocketTimeoutException e
-                  {})
-                (catch MalformedPacketException e
-                  (util/verbose (.getMessage e))
-                  {})
-                (catch UnwantedPacketException e
-                  (util/verbose e)
-                  (util/verbose (str "Illegal Optcode: "
-                                     (.getMessage e)))
-                  (optcode-error)
-                  {}))
-              session-fn (if sliding? sliding-session lockstep-session)]
-          (when-let [session-fn (and (not (empty? msg))
-                                     (if sliding?
-                                       sliding-session
-                                       lockstep-session))]
-            (println "You shouldn't be here!")
-            (try
-              (with-open [stream (input-stream Filename)]
-                (session-fn stream socket))
-              (catch FileNotFoundException e
-                (util/verbose (str "File " Filename " not found."))
-                (file-not-found-error Filename))))
-          (recur))))))
+       (util/with-connection socket
+         (loop []
+           (let [{:keys [Filename TID address sliding?] :as msg}
+                 (try
+                   (let [msg (tftp/recv-request socket packet)]
+                     (util/verbose "Received request")
+                     msg)
+                   (catch SocketTimeoutException e
+                     {})
+                   (catch MalformedPacketException e
+                     (util/verbose (.getMessage e))
+                     {})
+                   (catch UnwantedPacketException e
+                     (util/verbose e)
+                     (util/verbose (str "Illegal Optcode: "
+                                        (.getMessage e)))
+                     (optcode-error)
+                     {}))
+                 session-fn (if sliding? sliding-session lockstep-session)]
+             (when-let [session-fn (and (not (empty? msg))
+                                        (if sliding?
+                                          sliding-session
+                                          lockstep-session))]
+               (println "You shouldn't be here!")
+               (try
+                 (with-open [stream (input-stream Filename)]
+                   (session-fn stream socket))
+                 (catch FileNotFoundException e
+                   (util/verbose (str "File " Filename " not found."))
+                   (file-not-found-error Filename))))
+             (recur)))))))
