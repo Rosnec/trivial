@@ -62,7 +62,7 @@
                          nil))
                      {}))]
              (when (not (empty? msg))
-               (if (contains? [RRQ SRQ] opcode)
+               (if (contains? [RRQ SRQ] (dbg opcode))
                  (let [sliding-window? (= opcode SRQ)
                        session-fn (if sliding-window?
                                     sliding-session
