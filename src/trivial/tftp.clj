@@ -63,18 +63,18 @@
 ; data
 (defcodec data-encoding
   (ordered-map
-   :opcode DATA,
+   :opcode :int16-be,
    :block :int16-be,
    :data octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
-   :opcode ACK,
-   :block :int16))
+   :opcode :int16-be,
+   :block :int16-be))
 ; error
 (defcodec error-encoding
   (ordered-map
-   :opcode ERROR,
+   :opcode :int16-be,
    :error-code :int16,
    :error-msg delimited-string))
 
@@ -113,22 +113,25 @@
      (when (> (count data) BLOCK-SIZE)
        (throw (ex-info "Oversized block of data." {:cause :block-size})))
      (datagram-packet (util/buffers->bytes (encode data-encoding
-                                                   {:block block,
-                                                    :Data data}))
+                                                   {:opcode DATA
+                                                    :block block,
+                                                    :data data}))
                       address port)))
 
 (defn ack-packet
   "Create an ACK packet."
   ([block address port]
      (datagram-packet (util/buffers->bytes (encode ack-encoding
-                                                   {:block block}))
+                                                   {:opcode ACK
+                                                    :block block}))
                       address port)))
 
 (defn error-packet
   "Create an ERROR packet."
   ([code message address port]
      (datagram-packet (util/buffers->bytes (encode error-encoding
-                                                   {:error-code code,
+                                                   {:opcode ERROR
+                                                    :error-code code,
                                                     :error-msg message}))
                       address port)))
 
