@@ -89,7 +89,6 @@
     (cond
      (:help options) (util/exit 0 (usage summary))
      errors (util/exit 1 (error-msg errors)))
-    (println "options:" options ";arguments:" arguments)
     (binding [*verbose* (:verbose? options)
               *drop*    (:drop? options)]
       (case (first arguments)

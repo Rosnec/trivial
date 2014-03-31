@@ -52,13 +52,13 @@
   (ordered-map
    :opcode :int16-be,
    :filename delimited-string,
-   :mode octet-mode))
+   :mode open-string))
 ; sliding request
 (defcodec srq-encoding
   (ordered-map
    :opcode :int16-be,
    :filename delimited-string,
-   :mode octet-mode))
+   :mode open-string))
 ; data
 (defcodec data-encoding
   (ordered-map
@@ -93,7 +93,8 @@
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode rrq-encoding
                                                    {:opcode RRQ
-                                                    :filename filename}))
+                                                    :filename filename
+                                                    :mode OCTET}))
                       address port)))
 
 (defn srq-packet
@@ -101,7 +102,8 @@
   ([filename address port]
      (datagram-packet (util/buffers->bytes (encode srq-encoding
                                                    {:opcode SRQ
-                                                    :Filename filename}))
+                                                    :filename filename
+                                                    :mode OCTET}))
                       address port)))
 
 (defn data-packet
