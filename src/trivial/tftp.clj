@@ -1,5 +1,6 @@
 (ns trivial.tftp
-  (:require [gloss.core :refer [defcodec enum ordered-map repeated string]]
+  (:require [gloss.core :refer [defcodec enum header ordered-map repeated
+                                string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
@@ -45,7 +46,7 @@
 (def DATA-SIZE (+ BLOCK-SIZE 4))
 
 ;; Octet encoding ;;
-(def octet (repeated :byte))
+(def octet (repeated :byte :prefix :none))
 
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
@@ -54,40 +55,39 @@
 ;; Modes ;;
 (def octet-mode "OCTET")
 
-; 
-
 ;; Packet encodings ;;
 ; read request
 (defcodec rrq-encoding
   (ordered-map
+   :opcode :RRQ
    :filename delimited-string,
-   :window-size :uint16))
+   :window-size :uint16-be))
 ; sliding request
 (defcodec wrq-encoding
   {})
 ; data
 (defcodec data-encoding
   (ordered-map
-   :opcode :int16-be,
-   :block  :int16-be,
+   :opcode :DATA
+   :block  :uint16-be,
    :data   octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
-   :opcode :int16-be,
-   :block  :int16-be))
+   :opcode :ACK
+   :block  :uint16-be))
 ; error
 (defcodec error-encoding
   (ordered-map
-   :opcode     :int16-be,
-   :error-code :int16-be,
+   :opcode :ERROR
+   :error-code :uint16-be,
    :error-msg  delimited-string))
 
-(defcodec encodings
+(defcodec packet-encoding
   (header
    opcode
-   {:RRQ rrq-encoding :WRQ wrq-encoding :DATA data-encoding
-    :ACK ack-encoding :ERROR error-encoding}
+   {:RRQ rrq-encoding, :WRQ wrq-encoding,    :DATA data-encoding,
+    :ACK ack-encoding, :ERROR error-encoding}
    :opcode))
 
 (defn datagram-packet
@@ -103,29 +103,25 @@
 
 (defn rrq-packet
   "Create an RRQ packet."
-  ([filename address port]
-     (datagram-packet (util/buffers->bytes (encode rrq-encoding
-                                                   {:opcode RRQ
+  ([filename window-size address port]
+     (datagram-packet (util/buffers->bytes (encode packet-encoding
+                                                   {:opcode :RRQ
                                                     :filename filename
-                                                    :mode octet-mode}))
+                                                    :window-size window-size}))
                       address port)))
 
-(defn srq-packet
+(defn wrq-packet
   "Create an SRQ packet."
-  ([filename address port]
-     (datagram-packet (util/buffers->bytes (encode srq-encoding
-                                                   {:opcode SRQ
-                                                    :filename filename
-                                                    :mode octet-mode}))
-                      address port)))
+  ([filename window-size address port]
+     (throw (ex-info "Unsupported Operation"))))
 
 (defn data-packet
   "Create a DATA packet."
   ([block data address port]
      (when (> (count data) BLOCK-SIZE)
        (throw (ex-info "Oversized block of data." {:cause :block-size})))
-     (datagram-packet (util/buffers->bytes (encode data-encoding
-                                                   {:opcode DATA
+     (datagram-packet (util/buffers->bytes (encode packet-encoding
+                                                   {:opcode :DATA
                                                     :block block,
                                                     :data data}))
                       address port)))
@@ -133,16 +129,16 @@
 (defn ack-packet
   "Create an ACK packet."
   ([block address port]
-     (datagram-packet (util/buffers->bytes (encode ack-encoding
-                                                   {:opcode ACK
+     (datagram-packet (util/buffers->bytes (encode packet-encoding
+                                                   {:opcode :ACK
                                                     :block block}))
                       address port)))
 
 (defn error-packet
   "Create an ERROR packet."
   ([code message address port]
-     (datagram-packet (util/buffers->bytes (encode error-encoding
-                                                   {:opcode ERROR
+     (datagram-packet (util/buffers->bytes (encode packet-encoding
+                                                   {:opcode :ERROR
                                                     :error-code code,
                                                     :error-msg message}))
                       address port)))
@@ -156,7 +152,7 @@
   specified address and port."
   ([socket opcode address port]
      (send socket
-           (error-packet ILLEGAL-OPERATION
+           (error-packet :ILLEGAL-OPERATION
                          (str "Unknown opcode: "
                               opcode)
                          address
@@ -167,7 +163,7 @@
   specified address and port."
   ([socket opcode-unwanted opcode-wanted address port]
      (send socket
-           (error-packet ILLEGAL-OPERATION
+           (error-packet :ILLEGAL-OPERATION
                          (str "Unwanted opcode: "
                               opcode-unwanted
                               ". Want opcode(s): "
@@ -180,7 +176,7 @@
   specified address and port."
   ([socket address port]
      (send socket
-           (error-packet UNDEFINED
+           (error-packet :UNDEFINED
                          "Malformed packet"
                          address
                          port))))
@@ -190,7 +186,7 @@
   specified address and port."
   ([socket filename address port]
      (send socket
-           (error-packet FILE-NOT-FOUND
+           (error-packet :FILE-NOT-FOUND
                          (str "File " filename " not found.")
                          address
                          port))))
@@ -200,7 +196,7 @@
   specified address and port."
   ([socket address port]
      (send socket
-           (error-packet UNKNOWN-TID
+           (error-packet :UNKNOWN-TID
                          (str "TID " port " not recognized.")
                          address
                          port))))
@@ -226,7 +222,6 @@
            ; somehow this is nil when it shouldn't be
            encoding (case type
                       RRQ   rrq-encoding
-                      SRQ   srq-encoding
                       DATA  data-encoding
                       ACK   ack-encoding
                       ERROR error-encoding
