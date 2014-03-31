@@ -1,5 +1,5 @@
 (ns trivial.tftp
-  (:require [gloss.core :refer [defcodec ordered-map repeated string]]
+  (:require [gloss.core :refer [defcodec enum ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
@@ -16,6 +16,9 @@
 ; whether or not to drop packets
 (def ^:dynamic *drop* false)
 
+(defcodec opcode
+  (enum :uint16-be
+        :RRQ :WRQ :DATA :ACK :ERROR))
 ;; opcodes ;;
 (def RRQ   (short 1))
 (def SRQ   (short 2)) ; replace WRQ with SRQ for sliding window reads
@@ -23,6 +26,10 @@
 (def ACK   (short 4))
 (def ERROR (short 5))
 
+(defcodec error-code
+  (enum :uint16-be
+        :UNDEFINED :FILE-NOT-FOUND :ACCESS-VIOLATION :DISK-FULL
+        :ILLEGAL-OPERATION :UNKNOWN-TID :FILE--EXISTS :NO-SUCH-USER))
 ;; Error codes ;;
 (def UNDEFINED           (short 0))
 (def FILE-NOT-FOUND      (short 1))
@@ -48,23 +55,16 @@
 (def octet-mode "OCTET")
 
 ; 
-(defcodec encoding
-  (ordered-map
-   :opcode :int16-be,
-   :rest   octet))
+
 ;; Packet encodings ;;
 ; read request
 (defcodec rrq-encoding
   (ordered-map
-   :opcode   :int16-be,
    :filename delimited-string,
-   :mode     open-string))
+   :window-size :uint16))
 ; sliding request
-(defcodec srq-encoding
-  (ordered-map
-   :opcode   :int16-be,
-   :filename delimited-string,
-   :mode     open-string))
+(defcodec wrq-encoding
+  {})
 ; data
 (defcodec data-encoding
   (ordered-map
@@ -82,6 +82,13 @@
    :opcode     :int16-be,
    :error-code :int16-be,
    :error-msg  delimited-string))
+
+(defcodec encodings
+  (header
+   opcode
+   {:RRQ rrq-encoding :WRQ wrq-encoding :DATA data-encoding
+    :ACK ack-encoding :ERROR error-encoding}
+   :opcode))
 
 (defn datagram-packet
   "Constructs a DatagramPacket.
