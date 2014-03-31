@@ -207,6 +207,7 @@
            port (util/dbg (.getPort packet))
            buffer (to-byte-buffer (.getData packet))
            type (util/dbg (.getShort buffer))
+           ; somehow this is nil when it shouldn't be
            encoding (case type
                       RRQ   rrq-encoding
                       SRQ   srq-encoding
@@ -220,7 +221,7 @@
          ; of the data in the packet
          (assoc
              (try
-               (decode encoding (.rewind buffer))
+               (dbg (decode encoding (.rewind buffer)))
                (catch Exception e
                  (throw (ex-info "Malformed packet"
                                  {:cause :malformed
