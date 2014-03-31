@@ -47,36 +47,41 @@
 ;; Modes ;;
 (def octet-mode "OCTET")
 
+; 
+(defcodec encoding
+  (ordered-map
+   :opcode :int16-be,
+   :rest   octet))
 ;; Packet encodings ;;
 ; read request
 (defcodec rrq-encoding
   (ordered-map
-   :opcode :int16-be,
+   :opcode   :int16-be,
    :filename delimited-string,
-   :mode open-string))
+   :mode     open-string))
 ; sliding request
 (defcodec srq-encoding
   (ordered-map
-   :opcode :int16-be,
+   :opcode   :int16-be,
    :filename delimited-string,
-   :mode open-string))
+   :mode     open-string))
 ; data
 (defcodec data-encoding
   (ordered-map
    :opcode :int16-be,
-   :block :int16-be,
-   :data octet))
+   :block  :int16-be,
+   :data   octet))
 ; acknowledgement
 (defcodec ack-encoding
   (ordered-map
    :opcode :int16-be,
-   :block :int16-be))
+   :block  :int16-be))
 ; error
 (defcodec error-encoding
   (ordered-map
-   :opcode :int16-be,
-   :error-code :int16,
-   :error-msg delimited-string))
+   :opcode     :int16-be,
+   :error-code :int16-be,
+   :error-msg  delimited-string))
 
 (defn datagram-packet
   "Constructs a DatagramPacket.
