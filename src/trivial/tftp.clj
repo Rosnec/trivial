@@ -94,7 +94,7 @@
      (datagram-packet (util/buffers->bytes (encode rrq-encoding
                                                    {:opcode RRQ
                                                     :filename filename
-                                                    :mode OCTET}))
+                                                    :mode octet-mode}))
                       address port)))
 
 (defn srq-packet
@@ -103,7 +103,7 @@
      (datagram-packet (util/buffers->bytes (encode srq-encoding
                                                    {:opcode SRQ
                                                     :filename filename
-                                                    :mode OCTET}))
+                                                    :mode octet-mode}))
                       address port)))
 
 (defn data-packet
