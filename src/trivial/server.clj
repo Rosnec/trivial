@@ -46,8 +46,8 @@
                    (catch java.net.SocketTimeoutException e
                      {})
                    (catch clojure.lang.ExceptionInfo e
-                     (let [{:keys [cause packet]} (ex-data e)
-                           {:keys [address opcode port url]} packet]
+                     (let [{:keys [address cause packet port]} (ex-data e)
+                           {:keys [opcode url]} packet]
                        (println "address" address
                                 ",opcode" opcode
                                 ",port"   port

@@ -223,13 +223,17 @@
                (decode encoding (.rewind buffer))
                (catch Exception e
                  (throw (ex-info "Malformed packet"
-                                 {:cause :malformed}
+                                 {:cause :malformed
+                                  :address address
+                                  :port port}
                                  e))))
            :address address
            :port port
            :length length)
          (throw (ex-info "Unknown opcode"
-                         {:cause :unknown-opcode})))))
+                         {:cause :unknown-opcode
+                          :address address
+                          :port port})))))
   ([socket packet address port]
      (let [packet (recv socket packet)]
        (if (and (= (:address packet) address) (= (:port packet) port))
