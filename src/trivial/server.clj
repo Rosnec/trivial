@@ -1,7 +1,6 @@
 (ns trivial.server
   (:require [clojure.java.io :refer [input-stream]]
             [trivial.tftp :as tftp]
-            [trivial.tftp :refer [RRQ SRQ ACK DATA ERROR]]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
   (:import [java.io FileNotFoundException IOException]
@@ -30,12 +29,12 @@
            error-opcode-unwanted (partial tftp/error-opcode-unwanted socket)
            error-opcode-ack (fn [opcode address port]
                               (error-opcode-unwanted opcode
-                                                     [ACK ERROR]
+                                                     [:ACK :ERROR]
                                                      address
                                                      port))
            error-opcode-req (fn [opcode address port]
                               (error-opcode-unwanted opcode
-                                                     [RRQ SRQ]
+                                                     [:RRQ :SRQ]
                                                      address
                                                      port))]
        (util/with-connection socket
@@ -65,7 +64,7 @@
              (when (and (not (empty? msg))
                         address
                         port)
-               (if (contains? [RRQ SRQ] (dbg opcode))
+               (if (contains? [:RRQ :SRQ] (dbg opcode))
                  (let [sliding-window? (= opcode SRQ)
                        session-fn (if sliding-window?
                                     sliding-session

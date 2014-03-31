@@ -10,36 +10,17 @@
 ;; Defaults ;;
 ; default datagram timeout in ms
 (def ^:dynamic *timeout* 1000)
-; default number of retries
-(def ^:dynamic *retries* 10)
-; number of packets to send concurrently
-(def ^:dynamic *window-size* 4)
 ; whether or not to drop packets
 (def ^:dynamic *drop* false)
 
 (defcodec opcode
   (enum :uint16-be
         :RRQ :WRQ :DATA :ACK :ERROR))
-;; opcodes ;;
-(def RRQ   (short 1))
-(def SRQ   (short 2)) ; replace WRQ with SRQ for sliding window reads
-(def DATA  (short 3))
-(def ACK   (short 4))
-(def ERROR (short 5))
 
 (defcodec error-code
   (enum :uint16-be
         :UNDEFINED :FILE-NOT-FOUND :ACCESS-VIOLATION :DISK-FULL
         :ILLEGAL-OPERATION :UNKNOWN-TID :FILE--EXISTS :NO-SUCH-USER))
-;; Error codes ;;
-(def UNDEFINED           (short 0))
-(def FILE-NOT-FOUND      (short 1))
-(def ACCESS-VIOLATION    (short 2))
-(def DISK-FULL           (short 3))
-(def ILLEGAL-OPERATION   (short 4))
-(def UNKNOWN-TID         (short 5))
-(def FILE-ALREADY-EXISTS (short 6))
-(def NO-SUCH-USER        (short 7))
 
 ;; Size constants ;;
 (def BLOCK-SIZE 512)
@@ -51,9 +32,6 @@
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
 (def open-string      (string :ascii))
-
-;; Modes ;;
-(def octet-mode "OCTET")
 
 ;; Packet encodings ;;
 ; read request
@@ -217,35 +195,16 @@
            ; might have to use different methods (e.g. getLocalAddress)
            address (util/dbg (.getAddress packet))
            port (util/dbg (.getPort packet))
-           buffer (to-byte-buffer (.getData packet))
-           type (util/dbg (.getShort buffer))
-           ; somehow this is nil when it shouldn't be
-           encoding (case type
-                      RRQ   rrq-encoding
-                      DATA  data-encoding
-                      ACK   ack-encoding
-                      ERROR error-encoding
-                      nil)]
-       (if encoding
-         ; return the decoded packet if it is one of the defined types
-         ; includes the sender's address and port, as well as the length
-         ; of the data in the packet
-         (assoc
-             (try
-               (dbg (decode encoding (.rewind buffer)))
-               (catch Exception e
-                 (throw (ex-info "Malformed packet"
-                                 {:cause :malformed
-                                  :address address
-                                  :port port}
-                                 e))))
-           :address address
-           :port port
-           :length length)
-         (throw (ex-info "Unknown opcode"
-                         {:cause :unknown-opcode
-                          :address address
-                          :port port})))))
+           buffer (to-byte-buffer (.getData packet))]
+       (assoc
+           (try
+             (decode packet-encoding buffer)
+             (catch Exception e
+               (throw (ex-info "Malformed packet"
+                               {:cause :malformed
+                                :address address
+                                :port port}
+                               e)))))
   ([socket packet address port]
      (let [packet (recv socket packet)]
        (if (and (= (:address packet) address) (= (:port packet) port))
@@ -254,7 +213,7 @@
            (throw (ex-info "Unknown sender"
                            {:cause :unknown-sender
                             :address address
-                            :port port})))))))
+                            :port port}))))))))
 
 (defn recv-data
   "Receives a data packet from the given address and port. The packet must
