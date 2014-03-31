@@ -1,7 +1,8 @@
 (ns trivial.tftp
   (:require [gloss.core :refer [defcodec ordered-map repeated string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
-            [trivial.util :as util])
+            [trivial.util :as util]
+            [trivial.util :refer [dbg verbose]])
   (:import [java.net DatagramPacket DatagramSocket])
   (:refer-clojure :exclude [send]))
 
