@@ -8,13 +8,17 @@
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
   ([packets socket address port timeout]
-     (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))]
-       (loop [current-block 1
+     (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
+           time-to-exit (fn [timeout] (+ (System/nanoTime) timeout))]
+       (loop [block 1
               unacked-packets packets
-              exit-time (+ (System/nanoTime) timeout)]
+              exit-time (time-to-exit timeout)]
          (when (not (empty? unacked-packets))
            (tftp/send socket (next unacked-packet))
-           (let [{:keys [address block port] :as response}
+           (let [{current-address :address
+                  current-block   :block
+                  current-port    :port
+                  :as response}
                  (try
                    (recv socket recv-packet)
                    (catch java.net.SocketTimeoutException e
@@ -23,12 +27,21 @@
                      (let [{:keys [address cause port]} (ex-data e)]
                        (verbose (.getMessage e))
                        (case cause
-                         :malformed (error-malformed address port)
-                         :unknown-sender (error-tid address port)
+                         :malformed
+                         (error-malformed current-address current-port)
+                         :unknown-sender
+                         (error-tid curent-address current-port)
                          nil))
-                     {})
-                   ; continue here
-                   )]))))))
+                     {}))]
+             (if (and (= address current-address) (= port current-port))
+               (if (= block current-block)
+                 (recur (inc block) (next unacked-packets)
+                        (time-to-exit timeout))
+                 (if (> exit-time (System/nanoTime))
+                   (recur block unacked-packets exit-time)
+                   (println "Session with" address "at port" port
+                            "timed out.")))
+               (error-tid current-address current-port))))))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
