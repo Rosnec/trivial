@@ -2,8 +2,7 @@
   (:require [clojure.java.io :refer [input-stream]]
             [trivial.tftp :as tftp]
             [trivial.util :as util]
-            [trivial.util :refer [dbg verbose]])
-  (:import [java.net URL]))
+            [trivial.util :refer [dbg verbose]]))
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
@@ -14,13 +13,13 @@
               unacked-packets packets
               exit-time (time-to-exit timeout)]
          (when (not (empty? unacked-packets))
-           (tftp/send socket (next unacked-packet))
+           (tftp/send socket (first unacked-packets))
            (let [{current-address :address
                   current-block   :block
                   current-port    :port
                   :as response}
                  (try
-                   (recv socket recv-packet)
+                   (tftp/recv socket recv-packet)
                    (catch java.net.SocketTimeoutException e
                      {})
                    (catch clojure.lang.ExceptionInfo e
@@ -28,9 +27,10 @@
                        (verbose (.getMessage e))
                        (case cause
                          :malformed
-                         (error-malformed current-address current-port)
+                         (tftp/error-malformed socket address port)
                          :unknown-sender
-                         (error-tid curent-address current-port)
+                         (tftp/error-tid socket address port)
+
                          nil))
                      {}))]
              (if (and (= address current-address) (= port current-port))
@@ -41,7 +41,7 @@
                    (recur block unacked-packets exit-time)
                    (println "Session with" address "at port" port
                             "timed out.")))
-               (error-tid current-address current-port))))))))
+               (tftp/error-tid socket current-address current-port))))))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."

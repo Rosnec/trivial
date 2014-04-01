@@ -68,7 +68,6 @@
                        (conj file-chunks data)
                        (+ (System/nanoTime) timeout-ns))
                 (do
-                  (verbose "Received wrong block")
                   (send-ack expected-block)
                   (conj file-chunks data)))
 

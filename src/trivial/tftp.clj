@@ -214,7 +214,7 @@
      (let [packet-data (partition BLOCK-SIZE (util/lazy-input stream))]
        (map (fn [data block] (data-packet block data address port))
             packet-data
-            (range)))))
+            (next (range))))))
 
 (defn socket
   "Constructs a DatagramSocket."
