@@ -75,6 +75,15 @@
         ~@body
         (finally (.close ~closable)))))
 
+(defn lazy-input
+  "Returns a lazy sequence of bytes from an input stream or Reader."
+  [input-stream]
+  (let [step (fn step []
+               (let [c (.read input-stream)]
+                 (when-not (== c -1)
+                   (cons (byte c) (lazy-seq (step))))))]
+    (lazy-seq (step))))
+
 (defmacro web-stream
   "Returns a BufferedReader stream from the URL."
   ([url] `(-> (.openStream ~url)

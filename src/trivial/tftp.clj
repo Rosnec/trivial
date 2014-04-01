@@ -20,7 +20,7 @@
 (defcodec error-code
   (enum :uint16-be
         :UNDEFINED :FILE-NOT-FOUND :ACCESS-VIOLATION :DISK-FULL
-        :ILLEGAL-OPERATION :UNKNOWN-TID :FILE--EXISTS :NO-SUCH-USER))
+        :ILLEGAL-OPERATION :UNKNOWN-TID :FILE-EXISTS :NO-SUCH-USER))
 
 ;; Size constants ;;
 (def BLOCK-SIZE 512)
@@ -58,7 +58,7 @@
 (defcodec error-encoding
   (ordered-map
    :opcode :ERROR
-   :error-code :uint16-be,
+   :error-code error-code
    :error-msg  delimited-string))
 
 (defcodec packet-encoding
@@ -125,18 +125,7 @@
   "Sends the packet over the socket"
   ([socket packet] (.send socket packet)))
 
-(defn error-opcode-unknown
-  "Sends an unknown opcode error packet through the socket to the
-  specified address and port."
-  ([socket opcode address port]
-     (send socket
-           (error-packet :ILLEGAL-OPERATION
-                         (str "Unknown opcode: "
-                              opcode)
-                         address
-                         port))))
-
-(defn error-opcode-unwanted
+(defn error-opcode
   "Sends an unwanted opcode error through the socket to the
   specified address and port."
   ([socket opcode-unwanted opcode-wanted address port]
@@ -195,16 +184,20 @@
            ; might have to use different methods (e.g. getLocalAddress)
            address (util/dbg (.getAddress packet))
            port (util/dbg (.getPort packet))
-           buffer (to-byte-buffer (.getData packet))]
-       (assoc
-           (try
-             (decode packet-encoding buffer)
-             (catch Exception e
-               (throw (ex-info "Malformed packet"
-                               {:cause :malformed
-                                :address address
-                                :port port}
-                               e)))))
+           data (.getData packet)
+           buffer (java.nio.ByteBuffer/wrap data 0 length)]
+       (verbose buffer)
+       (assoc (try
+                (dbg (decode packet-encoding buffer))
+                (catch Exception e
+                  (throw (ex-info "Malformed packet"
+                                  {:cause :malformed
+                                   :address address
+                                   :port port}
+                                  e))))
+         :address address
+         :length length
+         :port port)))
   ([socket packet address port]
      (let [packet (recv socket packet)]
        (if (and (= (:address packet) address) (= (:port packet) port))
@@ -213,42 +206,24 @@
            (throw (ex-info "Unknown sender"
                            {:cause :unknown-sender
                             :address address
-                            :port port}))))))))
-
-(defn recv-data
-  "Receives a data packet from the given address and port. The packet must
-  have opcode DATA, and its block # must match the given one, or else an
-  Exception is thrown."
-  ([socket packet address port expected-block]
-     (let [{:keys [block length opcode] :as packet}
-           (recv socket packet address port)]
-       (cond
-        (not= opcode DATA) (throw (ex-info "Unwanted opcode"
-                                           {:cause :opcode
-                                            :opcode opcode}))
-        (not= block expected-block) (throw (ex-info "Incorrect block #"
-                                                    {:cause :block}))
-        :default (assoc packet :more? (= length BLOCK-SIZE))))))
-
-(defn recv-request
-  "Receives a request (RRQ or SRQ) packet from the socket."
-  ([socket packet]
-     (let [{:keys [opcode] :as packet}
-           (recv socket packet)]
-       (if (or (= opcode RRQ) (= opcode SRQ))
-         packet
-         (throw (ex-info "Unwanted opcode"
-                         {:cause :opcode
-                          :opcode opcode}))))))
+                            :port port})))))))
+(defn stream-to-packets
+  "Takes a stream of bytes along with an address and port to send to,
+  and returns a lazy sequence of packets containing that data."
+  ([stream address port]
+     (let [packet-data (partition BLOCK-SIZE (util/lazy-input stream))]
+       (map (fn [data block] (data-packet block data address port))
+            packet-data
+            (range)))))
 
 (defn socket
   "Constructs a DatagramSocket."
   ([timeout]
-     (doto (DatagramSocket.)
+     (doto (new DatagramSocket)
        (.setSoTimeout timeout)))
   ([timeout port]
-     (doto (DatagramSocket. port)
+     (doto (new DatagramSocket port)
        (.setSoTimeout timeout)))
   ([timeout port address]
-     (doto (DatagramSocket. port address)
+     (doto (new DatagramSocket port address)
        (.setSoTimeout timeout))))

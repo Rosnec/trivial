@@ -5,7 +5,7 @@
             [trivial.server :as server]
             [trivial.tftp :refer [*drop*]]
             [trivial.util :as util]
-            [trivial.util :refer [*verbose*]])
+            [trivial.util :refer [dbg verbose *verbose*]])
   (:gen-class))
 
 (def cli-options
@@ -34,9 +34,11 @@
    [nil "--IPv6" "IPv6 mode"
     :id :IPv6?
     :default false],
-   [nil "--sliding-window" "Sliding window mode"
-    :id :sliding-window?
-    :default false]])
+   [nil "--window-size" "Size of window for sliding-window mode."
+    :id :window-size
+    :default 0
+    :parse-fn #(Integer/parseInt %)
+    :validate [#(<= 0 % 0xffff) "Must be a number between 0 and 65536"]]])
 
 (def server-options
   [])
@@ -93,7 +95,7 @@
               *drop*    (:drop? options)]
       (case (first arguments)
         "server" (do
-                   (util/verbose "Starting server.")
+                   (verbose "Starting server.")
                    (server/start options))
 
         "client" (let [{:keys [options arguments errors summary]}
@@ -104,7 +106,7 @@
                                                 1 (usage-client summary))
                     errors (util/exit 1 (error-msg errors)))
                    (let [url (first arguments)]
-                     (util/verbose "Starting client with url:" url)
+                     (verbose "Starting client with url:" url)
                      (client/start url (merge global-options options))))
 
         (util/exit 1 (usage summary))))))

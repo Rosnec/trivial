@@ -14,7 +14,7 @@
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
   ([url socket server-address server-port timeout]
-     (let [rrq-packet (tftp/rrq-packet url server-address server-port)
+     (let [rrq-packet (tftp/rrq-packet url 0 server-address server-port)
            data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            send-rrq (partial tftp/send socket rrq-packet)
            send-ack (fn ack [block]
@@ -24,7 +24,6 @@
                                    (tftp/ack-packet block
                                                     server-address
                                                     server-port))))
-           error-opcode-unknown (partial tftp/error-opcode-unknown socket)
            error-malformed      (partial tftp/error-malformed socket)
            error-not-found      (partial tftp/error-not-found socket)
            error-tid            (partial tftp/error-tid socket)
@@ -39,21 +38,18 @@
                                                   1e9))
                          "s"))
            (send-ack last-block)
-           (let [{:keys [address block data length opcode port retry?]
+           (let [{:keys [address block data error-code error-msg length
+                         opcode port retry?]
                   :as response}
                  (try
                    (tftp/recv socket data-packet server-address server-port)
                    (catch java.net.SocketTimeoutException e
                      {:retry? true})
                    (catch clojure.lang.ExceptionInfo e
-                     (let [{:keys [cause packet]} (ex-data e)
-                           {url :filename :keys [address opcode port]} packet]
+                     (let [{:keys [address cause port]} (ex-data e)]
                        (verbose (.getMessage e))
                        (case cause
                          :malformed (error-malformed address port)
-                         :unknown-opcode (error-opcode-unknown opcode
-                                                               address
-                                                               port)
                          :unknown-sender (error-tid address port)
                          nil))
                      {:retry? true}))]
@@ -76,29 +72,30 @@
                   (send-ack expected-block)
                   (conj file-chunks data)))
 
-              (= opcode tftp/ERROR)
-              (let [{:keys [error-code error-msg]} response]
-                (case error-code
-                  tftp/FILE-NOT-FOUND (println "File not found,"
-                                               "terminating connection.")
-                  tftp/UNDEFINED (do
-                                   (println error-msg)
-                                   (recur last-block expected-block
-                                          file-chunks time-limit))
-                  (println error-msg)))
+              (= opcode :ERROR)
+              (case error-code
+                :FILE-NOT-FOUND (println "File not found,"
+                                         "terminating connection.")
+                :UNDEFINED (do
+                             (println error-msg)
+                             (recur last-block expected-block
+                                    file-chunks time-limit))
+                (println "ERROR:" error-msg))
               :default (println "Disconnected."))))))))
 
 (defn sliding-session
   "Runs a session with the provided proxy server using sliding window."
-  ([url socket server-address server-port timeout]
+  ([window-size url socket server-address server-port timeout]
      nil))
 
 (defn start
   ([url options]
-     (let [{:keys [hostname IPv6? port sliding-window? timeout]} options
+     (let [{:keys [hostname IPv6? port window-size timeout]} options
            ip-fn (if IPv6? IPv6-address IPv4-address)
            address (ip-fn hostname)
            server (tftp/socket tftp/*timeout*)
-           session-fn (if sliding-window? sliding-session lockstep-session)]
+           session-fn (if (not= 0 window-size)
+                        (partial sliding-session window-size)
+                        lockstep-session)]
        (verbose "Connecting to" address "at port" port)
        (session-fn url server address port timeout))))

@@ -3,18 +3,38 @@
             [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
-  (:import [java.io FileNotFoundException IOException]
-           [java.net InetAddress SocketException SocketTimeoutException URL]))
+  (:import [java.net URL]))
 
 (defn lockstep-session
   "Sends the contents of stream to client using lockstep."
-  ([stream socket address port] (println "yee boiii")))
+  ([packets socket address port timeout]
+     (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))]
+       (loop [current-block 1
+              unacked-packets packets
+              exit-time (+ (System/nanoTime) timeout)]
+         (when (not (empty? unacked-packets))
+           (tftp/send socket (next unacked-packet))
+           (let [{:keys [address block port] :as response}
+                 (try
+                   (recv socket recv-packet)
+                   (catch java.net.SocketTimeoutException e
+                     {})
+                   (catch clojure.lang.ExceptionInfo e
+                     (let [{:keys [address cause port]} (ex-data e)]
+                       (verbose (.getMessage e))
+                       (case cause
+                         :malformed (error-malformed address port)
+                         :unknown-sender (error-tid address port)
+                         nil))
+                     {})
+                   ; continue here
+                   )]))))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
-  ([stream socket]
+  ([window-size packets socket timeout]
      (comment
-       (loop [panorama (partition tftp/*window-size* 1 packets)]
+       (loop [panorama (partition window-size 1 packets)]
          (let [num-received 1]
            (recur (nthrest num-received panorama)))))))
 
@@ -25,56 +45,61 @@
            packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            error-malformed (partial tftp/error-malformed socket)
            error-not-found (partial tftp/error-not-found socket)
-           error-opcode-unknown (partial tftp/error-opcode-unknown socket)
-           error-opcode-unwanted (partial tftp/error-opcode-unwanted socket)
+           error-opcode (partial tftp/error-opcode socket)
            error-opcode-ack (fn [opcode address port]
-                              (error-opcode-unwanted opcode
-                                                     [:ACK :ERROR]
-                                                     address
-                                                     port))
-           error-opcode-req (fn [opcode address port]
-                              (error-opcode-unwanted opcode
-                                                     [:RRQ :SRQ]
-                                                     address
-                                                     port))]
+                              (error-opcode opcode
+                                            :ACK
+                                            address
+                                            port))
+           error-opcode-rrq (fn [opcode address port]
+                              (error-opcode opcode
+                                            :RRQ
+                                            address
+                                            port))]
        (util/with-connection socket
          (loop []
-           (let [{:keys [address filename length mode opcode port] :as msg}
+           (let [{:keys [address filename length mode opcode port
+                         window-size]
+                  :as msg}
                  (try
                    (tftp/recv socket packet)
                    (catch java.net.SocketTimeoutException e
                      {})
                    (catch clojure.lang.ExceptionInfo e
                      (let [{:keys [address cause packet port]} (ex-data e)
-                           {:keys [filename opcode]} packet]
-                       (println "address" address
-                                ",opcode" opcode
-                                ",port"   port
-                                ",filename"    filename)
+                           {:keys [filename opcode window-size]} packet]
                        (verbose (.getMessage e))
                        (case cause
                          :malformed (error-malformed address port)
-                         :unknown-opcode (error-opcode-unknown opcode
-                                                               address
-                                                               port)
-                         :unwanted-opcode 
+                         :opcode (error-opcode opcode
+                                               address
+                                               port)
                          nil))
                      {}))]
-             (println "msg:" msg)
+             (verbose "msg:" msg)
              (when (and (not (empty? msg))
                         address
                         port)
-               (if (contains? [:RRQ :SRQ] (dbg opcode))
-                 (let [sliding-window? (= opcode SRQ)
-                       session-fn (if sliding-window?
+               (verbose "Connected to" address "on port" port)
+               (if (= opcode :RRQ)
+                 (let [session-fn (if (not= 0 window-size)
                                     sliding-session
                                     lockstep-session)]
                    (try
                      (with-open [stream (input-stream filename)]
-                       (session-fn stream socket address port))))
+                       (session-fn (tftp/stream-to-packets stream
+                                                           address
+                                                           port)
+                                   socket
+                                   address
+                                   port
+                                   timeout))
+                     (catch java.io.FileNotFoundException e
+                       (verbose "Requested file:" filename "not found.")
+                       (error-not-found filename address port))))
                  (do
                    (verbose "Non-request packet received:" msg)
-                   (error-opcode-req opcode
+                   (error-opcode-rrq opcode
                                      address
                                      port)))))
            (recur))))))
