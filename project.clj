@@ -1,4 +1,4 @@
-(defproject trivial "0.1.0-SNAPSHOT"
+(defproject trivial "0.1.0"
   :description "A proxy server implemented using a slightly modified version
                of TFTP."
   :url "https://github.com/Rosnec/trivial"
