@@ -8,7 +8,9 @@
 
 ;; Defaults ;;
 ; default datagram timeout in ms
-(def ^:dynamic *timeout* 1000)
+(def ^:dynamic *timeout* 50) ; 50ms
+; default sliding window timeout in ns
+(def ^:dynamic *window-time* (* 100 1e6)) ; 100ms
 ; whether or not to drop packets
 (def ^:dynamic *drop* false)
 

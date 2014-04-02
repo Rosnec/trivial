@@ -12,6 +12,35 @@
   "Returns an InetAddress wrapper around the address using IPv6"
   ([address] (java.net.Inet6Address/getByName address)))
 
+(defn final-ack
+  "Sends the final ack repeatedly until timeout has elapsed without receiving
+  any data packets from the server."
+  ([block socket server-address server-port timeout data-packet]
+     (loop [time-limit (+ (System/nanoTime) timeout)]
+       ; send the ack
+       (tftp/send socket (tftp/ack-packet block server-address server-port))
+       ; await a response
+       (let [{:keys [address opcode port] :as response}
+             (try
+               (tftp/recv socket data-packet server-address server-port)
+               (catch java.net.SocketTimeoutException e
+                 {})
+               (catch clojure.lang.ExceptionInfo e
+                 {}))]
+         (cond
+          ; received data packet from server, resend ACK
+          (and (= address server-address)
+               (= port server-port)
+               (= opcode :DATA))
+          (recur (+ (System/nanoTime) timeout))
+
+          ; haven't timed out yet, resend ACK
+          (> timeout (System/nanoTime))
+          (recur time-limit)
+
+          ; timed out, exit
+          :default nil)))))
+
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
   ([url output-stream socket server-address server-port timeout]
@@ -33,8 +62,7 @@
            error-malformed (partial tftp/error-malformed socket)
            error-not-found (partial tftp/error-not-found socket)
            error-tid       (partial tftp/error-tid socket)
-           timeout-ns (* timeout 1e9)
-           exit-time #(+ (System/nanoTime) timeout-ns)]
+           exit-time #(+ (System/nanoTime) timeout)]
        (util/with-connection socket
          (loop [last-block     0
                 expected-block 1
@@ -75,8 +103,13 @@
                            (inc expected-block)
                            (exit-time)))
                   (do
-                    (send-ack expected-block)
                     (send-write data)
+                    (final-ack expected-block
+                               socket
+                               server-address
+                               server-port
+                               2e9 ; wait 2 seconds on final ack
+                               data-packet)
                     (await file-writer)
                     (println "Transfer successful.")
                     (util/exit 0))))
@@ -104,28 +137,95 @@
                                        window-size
                                        server-address
                                        server-port)
-           data-packets (repeatedly window-size #(tftp/datagram-packet
-                                                  (byte-array tftp/DATA-SIZE)))
+           data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            send-rrq (partial tftp/send socket rrq-packet)
-           send-ack (fn ack [block]
+           send-ack (fn send-ack [block]
                       (if (zero? block)
                         (send-rrq)
                         (tftp/send socket
                                    (tftp/ack-packet block
                                                     server-address
                                                     server-port))))
-           timeout-ns (* timeout 1e9)
-           exit-time #(+ (System/nanoTime) timeout-ns)]
+           exit-time #(+ (System/nanoTime) timeout)
+           window-time #(+ (System/nanoTime) tftp/*window-time*)]
        (util/with-connection socket
-         (loop [last-block     0
-                expected-block 1
-                time-limit     (exit-time)]
+         (loop [last-block 0
+                time-limit (exit-time)]
            (send-ack last-block)
-           ;; Need to figure out how I'm going to receive multiple
-           ;; packets in a row, without sending an ACK until I time out
-           ;; or receive the full window successfully
-           )))
-     nil))
+           (let [current-block ; I think this is being incremented when
+                               ; it shouldn't be
+                 (loop [next-block (inc last-block)
+                        final-block (+ next-block window-size)
+                        time-limit (window-time)]
+                   (let [{:keys [address block data error-code error-msg length
+                                 opcode port]}
+                         (try (tftp/recv socket
+                                         data-packet
+                                         server-address
+                                         server-port)
+                              (catch java.net.SocketTimeoutException e
+                                {})
+                              (catch clojure.lang.ExceptionInfo e
+                                (let [{:keys [address cause port]} (ex-data e)]
+                                  (verbose (.getMessage e))
+                                  (case cause
+                                    :malformed (tftp/error-malformed socket
+                                                                     address
+                                                                     port)
+                                    :unknown-sender (tftp/error-tid socket
+                                                                    address
+                                                                    port)
+                                    nil))
+                                {}))]
+                     (cond
+                      (and (or (not= block next-block)
+                               (not= address server-address)
+                               (not= port server-port))
+                           (> time-limit (System/nanoTime)))
+                      (recur next-block final-block time-limit)
+
+                      (= block next-block)
+                      (if (= length tftp/DATA-SIZE)
+                        (do
+                          (send-write data)
+                          (if (or (= block final-block)
+                                  (> (System/nanoTime) time-limit))
+                            block
+                            (recur (inc block) final-block time-limit)))
+                        (do
+                          (send-write data)
+                          (final-ack block
+                                     socket
+                                     server-address
+                                     server-port
+                                     2e9 ; wait 2 seconds on final ack
+                                     data-packet)
+                          (await file-writer)
+                          (println "Transfer successful.")
+                          (util/exit 0)))
+
+                      (= opcode :error)
+                      (case error-code
+                        :FILE-NOT-FOUND
+                        (util/exit 1 (str "File not found, "
+                                          "terminating connection."))
+                        :UNDEFINED (do
+                                     (verbose error-msg)
+                                     (recur next-block final-block time-limit))
+                        (println "ERROR:" error-msg))
+
+                      :default (do
+                                 (verbose "Window timed out.")
+                                 (dec next-block)))))]
+             (cond
+              (> current-block last-block)
+              (do (send-ack current-block)
+                  (recur current-block (exit-time)))
+
+              (> time-limit (System/nanoTime))
+              (recur current-block time-limit)
+
+              :default (util/exit 1 "Disconnected."))))))))
 
 (defn start
   ([url options]
@@ -140,4 +240,5 @@
        (io/delete-file output true)
        (with-open [output-stream (io/output-stream (io/file output)
                                                    :append true)]
-         (session-fn url output-stream socket address port timeout)))))
+         (session-fn url output-stream socket address port
+                     (* timeout 1e9))))))

@@ -36,7 +36,7 @@
     :default false],
    ["-o" "--output FILE" "Output filename"
     :id :output]
-   [nil "--window-size" "Size of window for sliding-window mode."
+   [nil "--window-size SIZE" "Size of window for sliding-window mode."
     :id :window-size
     :default 0
     :parse-fn #(Integer/parseInt %)
