@@ -8,13 +8,19 @@
   "Sends the contents of stream to client using lockstep."
   ([packets socket address port timeout]
      (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           time-to-exit (fn [timeout] (+ (System/nanoTime) timeout))]
+           timeout-ns (* timeout 1e9)
+           time-to-exit (fn [] (+ (System/nanoTime) timeout-ns))]
        (loop [block 1
+              prev-length nil
               unacked-packets packets
-              exit-time (time-to-exit timeout)]
-         (when (not (empty? unacked-packets))
-           (tftp/send socket (first unacked-packets))
-           (let [{current-address :address
+              exit-time (time-to-exit)]
+         (cond
+           ; still have packets to send
+           (not (empty? unacked-packets))
+           (let [packet (first unacked-packets)
+                 length (.getLength packet)
+                 _ (tftp/send socket packet)
+                 {current-address :address
                   current-block   :block
                   current-port    :port
                   :as response}
@@ -35,13 +41,22 @@
                      {}))]
              (if (and (= address current-address) (= port current-port))
                (if (= block current-block)
-                 (recur (inc block) (next unacked-packets)
-                        (time-to-exit timeout))
+                 (recur (inc block)
+                        length
+                        (next unacked-packets)
+                        (time-to-exit))
                  (if (> exit-time (System/nanoTime))
-                   (recur block unacked-packets exit-time)
-                   (println "Session with" address "at port" port
+                   (recur block prev-length unacked-packets exit-time)
+                   (verbose "Session with" address "at port" port
                             "timed out.")))
-               (tftp/error-tid socket current-address current-port))))))))
+               (tftp/error-tid socket current-address current-port)))
+           ; sent all packets, but final packet had 512B of data,
+           ; so we need to send a terminating 0B packet
+           (= prev-length tftp/DATA-SIZE)
+           (recur block nil [(tftp/data-packet block [] address port)]
+                  (time-to-exit))
+
+           :default (verbose "Transfer complete."))))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
@@ -56,19 +71,12 @@
      (let [{:keys [port timeout]} options
            socket (tftp/socket tftp/*timeout* port)
            packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           error-malformed (partial tftp/error-malformed socket)
-           error-not-found (partial tftp/error-not-found socket)
-           error-opcode (partial tftp/error-opcode socket)
-           error-opcode-ack (fn [opcode address port]
-                              (error-opcode opcode
-                                            :ACK
-                                            address
-                                            port))
            error-opcode-rrq (fn [opcode address port]
-                              (error-opcode opcode
-                                            :RRQ
-                                            address
-                                            port))]
+                              (tftp/error-opcode socket
+                                                 opcode
+                                                 :RRQ
+                                                 address
+                                                 port))]
        (util/with-connection socket
          (loop []
            (let [{:keys [address filename length mode opcode port
@@ -83,13 +91,13 @@
                            {:keys [filename opcode window-size]} packet]
                        (verbose (.getMessage e))
                        (case cause
-                         :malformed (error-malformed address port)
-                         :opcode (error-opcode opcode
-                                               address
-                                               port)
+                         :malformed (tftp/error-malformed socket address port)
+                         :opcode (tftp/error-opcode socket
+                                                    opcode
+                                                    address
+                                                    port)
                          nil))
                      {}))]
-             (verbose "msg:" msg)
              (when (and (not (empty? msg))
                         address
                         port)
@@ -99,17 +107,22 @@
                                     sliding-session
                                     lockstep-session)]
                    (try
-                     (with-open [stream (input-stream filename)]
-                       (session-fn (tftp/stream-to-packets stream
-                                                           address
-                                                           port)
-                                   socket
-                                   address
-                                   port
-                                   timeout))
+                     (let [start-time (System/nanoTime)]
+                       (with-open [stream (input-stream filename)]
+                         (session-fn (tftp/stream-to-packets stream
+                                                             address
+                                                             port)
+                                     socket
+                                     address
+                                     port
+                                     timeout))
+                       (println (str "Transfer Time: "
+                                     (/ (- (System/nanoTime) start-time)
+                                        1e9)
+                                     "s")))
                      (catch java.io.FileNotFoundException e
                        (verbose "Requested file:" filename "not found.")
-                       (error-not-found filename address port))))
+                       (tftp/error-not-found socket filename address port))))
                  (do
                    (verbose "Non-request packet received:" msg)
                    (error-opcode-rrq opcode

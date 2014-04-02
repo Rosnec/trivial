@@ -9,10 +9,10 @@
   {:private true}
   ([& pairs]
      `(do (when-not ~(first pairs)
-            (throw (IllegalArgumentException.
-                    (str (first ~'&form) " requires "
-                         ~(second pairs) " in " ~'*ns* ":"
-                         (:line (meta ~'&form))))))
+            (throw (new IllegalArgumentException
+                        (str (first ~'&form) " requires "
+                             ~(second pairs) " in " ~'*ns* ":"
+                             (:line (meta ~'&form))))))
           ~(let [more (nnext pairs)]
              (when more
                (list* `assert-args more))))))
@@ -32,6 +32,13 @@
   ([]                         (System/exit 0))
   ([status]                   (System/exit status))
   ([status msg] (println msg) (System/exit status)))
+
+(defn daemon
+  "Executes (func) in a new daemon thread."
+  ([func]
+     (doto (new Thread func)
+       (.setDaemon true)
+       (.start))))
 
 (defn print-err
   "Same as print but outputs to stdout."
@@ -81,14 +88,8 @@
   (let [step (fn step []
                (let [c (.read input-stream)]
                  (when-not (== c -1)
-                   (cons (byte c) (lazy-seq (step))))))]
+                   (cons (unchecked-byte c) (lazy-seq (step))))))]
     (lazy-seq (step))))
-
-(defmacro web-stream
-  "Returns a BufferedReader stream from the URL."
-  ([url] `(-> (.openStream ~url)
-              (InputStreamReader.)
-              (BufferedReader.))))
 
 (defmacro byte-stream->seq
   "Lazily transforms a byte stream into a chunked seq of bytes."

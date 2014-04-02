@@ -1,5 +1,6 @@
 (ns trivial.client
-  (:require [trivial.tftp :as tftp]
+  (:require [clojure.java.io :as io]
+            [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]]))
 
@@ -13,8 +14,13 @@
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
-  ([url socket server-address server-port timeout]
-     (let [rrq-packet (tftp/rrq-packet url 0 server-address server-port)
+  ([url output-stream socket server-address server-port timeout]
+     (let [file-writer (agent 0)
+           write-bytes (fn write-bytes [bytes]
+                         (io/copy (byte-array bytes) output-stream))
+           send-write (fn send-write [bytes]
+                        (send-off file-writer (fn [_] (write-bytes bytes))))
+           rrq-packet (tftp/rrq-packet url 0 server-address server-port)
            data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            send-rrq (partial tftp/send socket rrq-packet)
            send-ack (fn ack [block]
@@ -24,19 +30,15 @@
                                    (tftp/ack-packet block
                                                     server-address
                                                     server-port))))
-           error-malformed      (partial tftp/error-malformed socket)
-           error-not-found      (partial tftp/error-not-found socket)
-           error-tid            (partial tftp/error-tid socket)
-           timeout-ns (* timeout 1000000000)]
+           error-malformed (partial tftp/error-malformed socket)
+           error-not-found (partial tftp/error-not-found socket)
+           error-tid       (partial tftp/error-tid socket)
+           timeout-ns (* timeout 1e9)
+           exit-time #(+ (System/nanoTime) timeout-ns)]
        (util/with-connection socket
          (loop [last-block     0
                 expected-block 1
-                file-chunks    []
-                time-limit     (+ (System/nanoTime) timeout-ns)]
-           (verbose (str "disconnect in " (int (/ (- time-limit
-                                                     (System/nanoTime))
-                                                  1e9))
-                         "s"))
+                time-limit     (exit-time)]
            (send-ack last-block)
            (let [{:keys [address block data error-code error-msg length
                          opcode port retry?]
@@ -59,42 +61,83 @@
                        (not= address server-address)
                        (not= port server-port))
                    (> time-limit (System/nanoTime)))
-              (recur last-block expected-block file-chunks time-limit)
+              (recur last-block expected-block time-limit)
 
               (= block expected-block)
-              (if (= length tftp/DATA-SIZE)
-                (recur expected-block
-                       (inc expected-block)
-                       (conj file-chunks data)
-                       (+ (System/nanoTime) timeout-ns))
-                (do
-                  (send-ack expected-block)
-                  (conj file-chunks data)))
+              (do
+                (verbose (str "Received:\n"
+                              "  block#: " block "\n"
+                              "  length: " length))
+                (if (= length tftp/DATA-SIZE)
+                  (do
+                    (send-write data)
+                    (recur expected-block
+                           (inc expected-block)
+                           (exit-time)))
+                  (do
+                    (send-ack expected-block)
+                    (send-write data)
+                    (await file-writer)
+                    (println "Transfer successful.")
+                    (util/exit 0))))
 
               (= opcode :ERROR)
               (case error-code
                 :FILE-NOT-FOUND (println "File not found,"
                                          "terminating connection.")
+                :ILLEGAL-OPERATION (println "ERROR:" error-msg)
                 :UNDEFINED (do
-                             (println error-msg)
-                             (recur last-block expected-block
-                                    file-chunks time-limit))
+                             (verbose error-msg)
+                             (recur last-block expected-block time-limit))
                 (println "ERROR:" error-msg))
               :default (println "Disconnected."))))))))
 
 (defn sliding-session
   "Runs a session with the provided proxy server using sliding window."
-  ([window-size url socket server-address server-port timeout]
+  ([window-size url output-stream socket server-address server-port timeout]
+     (let [file-writer (agent 0)
+           write-bytes (fn write-bytes [bytes]
+                         (io/copy (byte-array bytes) output-stream))
+           send-write (fn send-write [bytes]
+                        (send-off file-writer (fn [_] (write-bytes bytes))))
+           rrq-packet (tftp/rrq-packet url
+                                       window-size
+                                       server-address
+                                       server-port)
+           data-packets (repeatedly window-size #(tftp/datagram-packet
+                                                  (byte-array tftp/DATA-SIZE)))
+           send-rrq (partial tftp/send socket rrq-packet)
+           send-ack (fn ack [block]
+                      (if (zero? block)
+                        (send-rrq)
+                        (tftp/send socket
+                                   (tftp/ack-packet block
+                                                    server-address
+                                                    server-port))))
+           timeout-ns (* timeout 1e9)
+           exit-time #(+ (System/nanoTime) timeout-ns)]
+       (util/with-connection socket
+         (loop [last-block     0
+                expected-block 1
+                time-limit     (exit-time)]
+           (send-ack last-block)
+           ;; Need to figure out how I'm going to receive multiple
+           ;; packets in a row, without sending an ACK until I time out
+           ;; or receive the full window successfully
+           )))
      nil))
 
 (defn start
   ([url options]
-     (let [{:keys [hostname IPv6? port window-size timeout]} options
+     (let [{:keys [hostname IPv6? output port window-size timeout]} options
            ip-fn (if IPv6? IPv6-address IPv4-address)
            address (ip-fn hostname)
-           server (tftp/socket tftp/*timeout*)
+           socket (tftp/socket tftp/*timeout*)
            session-fn (if (not= 0 window-size)
                         (partial sliding-session window-size)
                         lockstep-session)]
        (verbose "Connecting to" address "at port" port)
-       (session-fn url server address port timeout))))
+       (io/delete-file output true)
+       (with-open [output-stream (io/output-stream (io/file output)
+                                                   :append true)]
+         (session-fn url output-stream socket address port timeout)))))

@@ -4,7 +4,6 @@
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
-  (:import [java.net DatagramPacket DatagramSocket])
   (:refer-clojure :exclude [send]))
 
 ;; Defaults ;;
@@ -27,7 +26,7 @@
 (def DATA-SIZE (+ BLOCK-SIZE 4))
 
 ;; Octet encoding ;;
-(def octet (repeated :byte :prefix :none))
+(def octet (repeated :ubyte :prefix :none))
 
 ;; String encodings ;;
 (def delimited-string (string :ascii :delimiters ["\0"]))
@@ -75,9 +74,9 @@
   If address and port are also specified, constructs a DatagramPacket for
   sending packets to that address and port."
   ([bytes]
-     (new DatagramPacket bytes (alength bytes)))
+     (new java.net.DatagramPacket bytes (alength bytes)))
   ([bytes address port]
-     (new DatagramPacket bytes (alength bytes) address port)))
+     (new java.net.DatagramPacket bytes (alength bytes) address port)))
 
 (defn rrq-packet
   "Create an RRQ packet."
@@ -180,15 +179,14 @@
      (if (and *drop* (util/prob 0.01))
        (throw (new java.net.SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
-     (let [length (util/dbg (.getLength packet))
+     (let [length (.getLength packet)
            ; might have to use different methods (e.g. getLocalAddress)
-           address (util/dbg (.getAddress packet))
-           port (util/dbg (.getPort packet))
+           address (.getAddress packet)
+           port (.getPort packet)
            data (.getData packet)
            buffer (java.nio.ByteBuffer/wrap data 0 length)]
-       (verbose buffer)
        (assoc (try
-                (dbg (decode packet-encoding buffer))
+                (decode packet-encoding buffer)
                 (catch Exception e
                   (throw (ex-info "Malformed packet"
                                   {:cause :malformed
@@ -219,11 +217,11 @@
 (defn socket
   "Constructs a DatagramSocket."
   ([timeout]
-     (doto (new DatagramSocket)
+     (doto (new java.net.DatagramSocket)
        (.setSoTimeout timeout)))
   ([timeout port]
-     (doto (new DatagramSocket port)
+     (doto (new java.net.DatagramSocket port)
        (.setSoTimeout timeout)))
   ([timeout port address]
-     (doto (new DatagramSocket port address)
+     (doto (new java.net.DatagramSocket port address)
        (.setSoTimeout timeout))))

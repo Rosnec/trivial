@@ -34,6 +34,8 @@
    [nil "--IPv6" "IPv6 mode"
     :id :IPv6?
     :default false],
+   ["-o" "--output FILE" "Output filename"
+    :id :output]
    [nil "--window-size" "Size of window for sliding-window mode."
     :id :window-size
     :default 0
