@@ -184,13 +184,16 @@
                            (> time-limit (System/nanoTime)))
                       (recur next-block final-block time-limit)
 
-                      (= block next-block)
+                      ; correct block received
+                      (and (= block next-block)
+                           (= address server-address)
+                           (= port server-port))
                       (if (= length tftp/DATA-SIZE)
                         (do
-                          (send-write data)
+                          (send-write (dbg data))
                           (if (or (= block final-block)
                                   (> (System/nanoTime) time-limit))
-                            block
+                            (dbg next-block)
                             (recur (inc block) final-block time-limit)))
                         (do
                           (send-write data)
@@ -216,14 +219,15 @@
 
                       :default (do
                                  (verbose "Window timed out.")
-                                 (dec next-block)))))]
+                                 (dbg (dec next-block))))))]
+             (verbose current-block)
              (cond
               (> current-block last-block)
               (do (send-ack current-block)
                   (recur current-block (exit-time)))
 
               (> time-limit (System/nanoTime))
-              (recur current-block time-limit)
+              (recur last-block time-limit)
 
               :default (util/exit 1 "Disconnected."))))))))
 

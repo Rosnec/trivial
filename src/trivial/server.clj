@@ -1,3 +1,4 @@
+
 (ns trivial.server
   (:require [clojure.java.io :refer [input-stream]]
             [trivial.tftp :as tftp]
@@ -120,10 +121,9 @@
                      (= opcode :ACK))
               (if (> block num-acked)
                 (let [newly-acked (- block num-acked)]
-                  (recur (nthrest newly-acked panorama)
+                  (recur (nthrest panorama newly-acked)
                          block
-                         ; get the length of the last acked packet in the window
-                         (.getLength (nth (dec newly-acked) window))
+                         empty-packet
                          (time-to-exit)))
                 (if (> exit-time (System/nanoTime))
                   (recur panorama num-acked empty-packet exit-time)
