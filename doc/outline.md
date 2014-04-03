@@ -30,3 +30,13 @@
     window-map which is comes sequentially after :last-block without a missing
     block
   - empties the :packets map, after doing this
+
+- write a function which does something like this:
+```
+(do
+  (send-off window-agent flush-packets)
+  (await window-agent)
+  (let [block (:last-block @window-agent)]
+    (send-ack block)
+    (recur block ...)))
+```
