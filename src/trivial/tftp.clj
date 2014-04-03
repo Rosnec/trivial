@@ -2,6 +2,8 @@
   (:require [gloss.core :refer [defcodec enum header ordered-map repeated
                                 string]]
             [gloss.io :refer [contiguous decode encode to-byte-buffer]]
+            [trivial.math :as math]
+            [trivial.seq :as seq]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]])
   (:refer-clojure :exclude [send]))
@@ -83,10 +85,10 @@
 (defn rrq-packet
   "Create an RRQ packet."
   ([filename window-size address port]
-     (datagram-packet (util/buffers->bytes (encode packet-encoding
-                                                   {:opcode :RRQ
-                                                    :filename filename
-                                                    :window-size window-size}))
+     (datagram-packet (seq/buffers->bytes (encode packet-encoding
+                                                  {:opcode :RRQ
+                                                   :filename filename
+                                                   :window-size window-size}))
                       address port)))
 
 (defn wrq-packet
@@ -99,27 +101,27 @@
   ([block data address port]
      (when (> (count data) BLOCK-SIZE)
        (throw (ex-info "Oversized block of data." {:cause :block-size})))
-     (datagram-packet (util/buffers->bytes (encode packet-encoding
-                                                   {:opcode :DATA
-                                                    :block block,
-                                                    :data data}))
+     (datagram-packet (seq/buffers->bytes (encode packet-encoding
+                                                  {:opcode :DATA
+                                                   :block block,
+                                                   :data data}))
                       address port)))
 
 (defn ack-packet
   "Create an ACK packet."
   ([block address port]
-     (datagram-packet (util/buffers->bytes (encode packet-encoding
-                                                   {:opcode :ACK
-                                                    :block block}))
+     (datagram-packet (seq/buffers->bytes (encode packet-encoding
+                                                  {:opcode :ACK
+                                                   :block block}))
                       address port)))
 
 (defn error-packet
   "Create an ERROR packet."
   ([code message address port]
-     (datagram-packet (util/buffers->bytes (encode packet-encoding
-                                                   {:opcode :ERROR
-                                                    :error-code code,
-                                                    :error-msg message}))
+     (datagram-packet (seq/buffers->bytes (encode packet-encoding
+                                                  {:opcode :ERROR
+                                                   :error-code code,
+                                                   :error-msg message}))
                       address port)))
 
 (defn send
@@ -178,7 +180,7 @@
   if no valid packet is received. Might want to change this to throw a custom
   NoValidPacketException."
   ([socket packet]
-     (if (and *drop* (util/prob 0.01))
+     (if (and *drop* (math/prob 0.01))
        (throw (new java.net.SocketTimeoutException "Dropping packet."))
        (.receive socket packet))
      (let [length (.getLength packet)
@@ -211,7 +213,7 @@
   "Takes a stream of bytes along with an address and port to send to,
   and returns a lazy sequence of packets containing that data."
   ([stream address port]
-     (let [packet-data (partition BLOCK-SIZE (util/lazy-input stream))]
+     (let [packet-data (seq/lazy-input stream BLOCK-SIZE)]
        (map (fn [data block] (data-packet block data address port))
             packet-data
             (next (range))))))
