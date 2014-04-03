@@ -1,5 +1,6 @@
 (ns trivial.client
   (:require [clojure.java.io :as io]
+            [trivial.math :as math]
             [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]]))
@@ -16,30 +17,34 @@
   "Sends the final ack repeatedly until timeout has elapsed without receiving
   any data packets from the server."
   ([block socket server-address server-port timeout data-packet]
-     (loop [time-limit (+ (System/nanoTime) timeout)]
-       ; send the ack
-       (tftp/send socket (tftp/ack-packet block server-address server-port))
-       ; await a response
-       (let [{:keys [address opcode port] :as response}
-             (try
-               (tftp/recv socket data-packet server-address server-port)
-               (catch java.net.SocketTimeoutException e
-                 {})
-               (catch clojure.lang.ExceptionInfo e
-                 {}))]
-         (cond
-          ; received data packet from server, resend ACK
-          (and (= address server-address)
-               (= port server-port)
-               (= opcode :DATA))
-          (recur (+ (System/nanoTime) timeout))
+     (let [get-time (partial math/elapsed-time timeout)]
+       (loop [time-limit (get-time)]
+         (verbose "ACKing")
+         ; send the ack
+         (tftp/send socket (tftp/ack-packet block server-address server-port))
+         ; await a response
+         (let [{:keys [address opcode port] :as response}
+               (try
+                 (tftp/recv socket data-packet server-address server-port)
+                 (catch java.net.SocketTimeoutException e
+                   (verbose "Timed out")
+                   {})
+                 (catch clojure.lang.ExceptionInfo e
+                   (verbose "Other exception")
+                   {}))]
+           (cond
+            ; received data packet from server, resend ACK
+            (and (= address server-address)
+                 (= port server-port)
+                 (= opcode :DATA))
+            (recur (get-time))
 
-          ; haven't timed out yet, resend ACK
-          (> timeout (System/nanoTime))
-          (recur time-limit)
+            ; haven't timed out yet, resend ACK
+            (> timeout (System/nanoTime))
+            (recur time-limit)
 
-          ; timed out, exit
-          :default nil)))))
+            ; timed out, exit
+            :default (do (verbose "final timeout") nil)))))))
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
@@ -62,7 +67,7 @@
            error-malformed (partial tftp/error-malformed socket)
            error-not-found (partial tftp/error-not-found socket)
            error-tid       (partial tftp/error-tid socket)
-           exit-time #(+ (System/nanoTime) timeout)]
+           exit-time (partial math/elapsed-time timeout)]
        (loop [last-block     0
               expected-block 1
               time-limit     (exit-time)]
@@ -103,7 +108,7 @@
                          (exit-time)))
                 (do
                   (send-write data)
-                  (final-ack expected-block
+                  (final-ack block
                              socket
                              server-address
                              server-port
@@ -145,8 +150,8 @@
                                    (tftp/ack-packet block
                                                     server-address
                                                     server-port))))
-           exit-time #(+ (System/nanoTime) timeout)
-           window-time #(+ (System/nanoTime) tftp/*window-time*)]
+           exit-time (partial math/elapsed-time timeout)
+           window-time (partial math/elapsed-time tftp/*window-time*)]
        (loop [last-block 0
               time-limit (exit-time)]
          (send-ack last-block)
