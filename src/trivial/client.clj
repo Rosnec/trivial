@@ -1,5 +1,6 @@
 (ns trivial.client
   (:require [clojure.java.io :as io]
+            [gloss.io :refer [decode]]
             [trivial.math :as math]
             [trivial.tftp :as tftp]
             [trivial.util :as util]
@@ -153,7 +154,10 @@
                                   (verbose "Malformed packet received.")
                                   nil))]
            (if decoded-packet
-             (assoc-in m [:packets (:block decoded-packet)] decoded-packet)
+             (assoc-in m [:packets (:block decoded-packet)]
+                       (assoc decoded-packet
+                         ; whether or not more packets should follow
+                         :more? (= tftp/DATA-SIZE length)))
              m))
          m))))
 
@@ -164,23 +168,27 @@
   ([m block write-agent output-stream]
      (let [write-data (vals (take-while (fn [[k v]] (<= k block))
                                         (:packets m)))]
-       (send-off file-writer write-bytes output-stream write-data))
+       (send-off write-agent write-bytes output-stream write-data))
      (assoc m
+       :block block
        :packets (sorted-map)
-       :block block)))
+       :more? (:more? (last (:packets m))))))
 
 (defn window-results
   ""
   ([window-agent write-agent output-stream]
+     (await window-agent)
      (let [{:keys [block packets]} @window-agent
            highest-block (math/highest-sequential (keys packets) block 1)]
        (send-off window-agent
                  clear-packets highest-block write-agent output-stream)
-       highest-block)))
+       (await window-agent)
+       [highest-block (:more? @window-agent)])))
 
 (def window-agent-map
   {:block 0,
-   :packets (ordered-map)})
+   :packets (sorted-map)
+   :more? true})
 
 (defn make-writer-agent
   "Returns an empty file writer agent"
@@ -218,7 +226,7 @@
               time-limit (exit-time)
               packets (repeatedly make-data-packet)]
          (send-ack last-block)
-         (let [packets
+         (let [packets ; infinite lazy sequence of unused packets
                (loop [received 0
                       packets packets
                       time-limit (exit-time)]
@@ -226,7 +234,7 @@
                           (try
                             (tftp/recv* socket (first packets))
                             true
-                            (catch SocketTimeoutException e
+                            (catch java.net.SocketTimeoutException e
                               false))]
                    (do
                      (send-off window-agent
@@ -239,11 +247,12 @@
                    (if (> time-limit (System/nanoTime))
                      (recur received packets time-limit)
                      packets)))
-               ])
-
-         
-         (let [highest-block
-               (loop [next-block])])))))
+               [highest-block more?] (window-results)]
+           (if more?
+             (recur highest-block (exit-time) packets)
+             (final-ack highest-block socket
+                        server-address server-port
+                        2e9 (first packets))))))))
 
 (comment
   (defn sliding-session
