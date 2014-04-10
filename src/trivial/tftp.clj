@@ -171,6 +171,12 @@
                          address
                          port))))
 
+(defn recv*
+  ([socket packet]
+     (if (and *drop* (math/prob 0.01))
+       (throw (new java.net.SocketTimeoutException "Dropping packet."))
+       (.receive socket packet))))
+
 (defn recv
   "Receives a packet. If *drop* is true, has a 1% probability of dropping
   the packet and throwing a timeout exception.
@@ -180,9 +186,7 @@
   if no valid packet is received. Might want to change this to throw a custom
   NoValidPacketException."
   ([socket packet]
-     (if (and *drop* (math/prob 0.01))
-       (throw (new java.net.SocketTimeoutException "Dropping packet."))
-       (.receive socket packet))
+     (recv* socket packet)
      (let [length (.getLength packet)
            ; might have to use different methods (e.g. getLocalAddress)
            address (.getAddress packet)
