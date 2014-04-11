@@ -187,11 +187,12 @@
                                          address
                                          port
                                          (* timeout 1e9)))]
-                       (when success?
+                       (if success?
                          (println (str "Transfer Time: "
                                        (/ (- (System/nanoTime) start-time)
                                           1e9)
-                                       "s"))))
+                                       "s"))
+                         (println "Failure.")))
                      (catch java.io.FileNotFoundException e
                        (verbose "Requested file:" filename "not found.")
                        (tftp/error-not-found socket filename address port))))
