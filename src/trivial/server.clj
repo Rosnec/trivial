@@ -51,7 +51,7 @@
                     (verbose "Session with" address "at port" port
                              "timed out.")
                     false)))
-              (tftp/error-tid socket current-address current-port)))
+              (dbg (tftp/error-tid socket current-address current-port))))
           ; sent all packets, but final packet had 512B of data,
           ; so we need to send a terminating 0B packet
           (= prev-length tftp/DATA-SIZE)
