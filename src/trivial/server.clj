@@ -36,7 +36,7 @@
                         :malformed
                         (tftp/error-malformed socket address port)
                         :unknown-sender
-                        (tftp/error-tid socket address port)
+                        (dbg (tftp/error-tid socket address port))
                         nil))
                     {}))]
             (if (and (= address current-address) (= port current-port))
