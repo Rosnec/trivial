@@ -1,6 +1,7 @@
 
 (ns trivial.server
   (:require [clojure.java.io :refer [input-stream]]
+            [trivial.math :as math]
             [trivial.tftp :as tftp]
             [trivial.util :as util]
             [trivial.util :refer [dbg verbose]]))
@@ -9,7 +10,7 @@
   "Sends the contents of stream to client using lockstep."
   ([packets socket address port timeout]
      (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           time-to-exit (fn [] (+ (System/nanoTime) timeout))]
+           time-to-exit (partial math/elapsed-time timeout)]
        (loop [block 1
               prev-length nil
               unacked-packets packets
@@ -65,7 +66,7 @@
   ([window-size packets socket address port timeout]
      (verbose "it slides!")
      (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           time-to-exit (fn [] (+ (System/nanoTime) timeout))]
+           time-to-exit (partial math/elapsed-time timeout)]
        (loop [panorama (partition window-size 1 packets)
               num-acked 0
               empty-packet nil
