@@ -153,7 +153,8 @@
                                 (catch Exception e
                                   (verbose "Malformed packet received.")
                                   nil))]
-           (verbose "Received block#" (:block decoded-packet))
+           (verbose "Received block#" (:block decoded-packet)
+                    "with length" length)
            (if decoded-packet
              (assoc-in m [:packets (:block decoded-packet)]
                        (assoc decoded-packet
@@ -184,7 +185,7 @@
        (send-off window-agent
                  clear-packets highest-block write-agent output-stream)
        (await window-agent)
-       [highest-block (:more? @window-agent)])))
+       [highest-block (-> packets vals last :more?)])))
 
 (def window-agent-map
   {:block 0,
@@ -202,7 +203,9 @@
 (defn sliding-session
   "Runs a session with the provided proxy server using sliding window."
   ([window-size url output-stream socket server-address server-port timeout]
-     (let [window-agent (make-window-agent)
+     (let [; need 1 less than the window size in the receive loop
+           window-size-dec (dec window-size)
+           window-agent (make-window-agent)
            file-writer (make-writer-agent)
            write-bytes (partial write-bytes output-stream)
            window-results #(window-results window-agent
@@ -224,13 +227,16 @@
            exit-time (partial math/elapsed-time timeout)
            window-time (partial math/elapsed-time tftp/*window-time*)]
        (loop [last-block 0
-              time-limit (exit-time)
+              session-time-limit (exit-time)
               packets (repeatedly make-data-packet)]
          (send-ack last-block)
+         (verbose "ACK:" last-block)
          (let [packets ; infinite lazy sequence of unused packets
                (loop [received 0
                       packets packets
-                      time-limit (exit-time)]
+                      window-time-limit (exit-time)]
+                 (verbose "received:" received
+                          "window-size:" window-size)
                  (if-let [received?
                           (try
                             (tftp/recv* socket (first packets))
@@ -241,21 +247,29 @@
                      (send-off window-agent
                                add-packet (first packets)
                                server-address server-port)
-                     (if (and (< received window-size)
-                              (> time-limit (System/nanoTime)))
-                       (recur (inc received) (rest packets) time-limit)
+                     (if (dbg (and (< received window-size-dec)
+                                   (> window-time-limit (System/nanoTime))))
+                       (recur (inc received) (rest packets) window-time-limit)
                        (rest packets)))
-                   (if (> time-limit (System/nanoTime))
-                     (recur received packets time-limit)
+                   (if (> window-time-limit (System/nanoTime))
+                     (recur received packets window-time-limit)
                      packets)))
                [highest-block more?] (window-results)]
            (verbose "highest block:" highest-block
                     ", more?:" more?)
-           (if more?
-             (recur highest-block (exit-time) packets)
-             (final-ack highest-block socket
-                        server-address server-port
-                        2e9 (first packets))))))))
+           (cond
+            (> (System/nanoTime) session-time-limit)
+            (util/exit 1 "Session timed out.")
+
+            (= highest-block last-block)
+            (recur highest-block session-time-limit packets)
+
+            more?
+            (recur highest-block (exit-time) packets)
+
+            :default
+            (final-ack highest-block socket server-address server-port
+                       2e9 (first packets))))))))
 
 (comment
   (defn sliding-session

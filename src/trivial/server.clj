@@ -63,6 +63,7 @@
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
   ([window-size packets socket address port timeout]
+     (verbose "it slides!")
      (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            time-to-exit (fn [] (+ (System/nanoTime) timeout))]
        (loop [panorama (partition window-size 1 packets)
