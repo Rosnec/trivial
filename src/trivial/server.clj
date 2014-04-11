@@ -36,7 +36,9 @@
                         :malformed
                         (tftp/error-malformed socket address port)
                         :unknown-sender
-                        (dbg (tftp/error-tid socket address port))
+                        (do
+                          (verbose 1 socket address port)
+                          (tftp/error-tid socket address port))
                         nil))
                     {}))]
             (if (and (= address current-address) (= port current-port))
@@ -51,7 +53,9 @@
                     (verbose "Session with" address "at port" port
                              "timed out.")
                     false)))
-              (dbg (tftp/error-tid socket current-address current-port))))
+              (do
+                (verbose 2 socket current-address current-port)
+                (tftp/error-tid socket current-address current-port))))
           ; sent all packets, but final packet had 512B of data,
           ; so we need to send a terminating 0B packet
           (= prev-length tftp/DATA-SIZE)
