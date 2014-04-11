@@ -153,6 +153,7 @@
                                 (catch Exception e
                                   (verbose "Malformed packet received.")
                                   nil))]
+           (verbose "Received block#" (:block decoded-packet))
            (if decoded-packet
              (assoc-in m [:packets (:block decoded-packet)]
                        (assoc decoded-packet
@@ -248,6 +249,8 @@
                      (recur received packets time-limit)
                      packets)))
                [highest-block more?] (window-results)]
+           (verbose "highest block:" highest-block
+                    ", more?:" more?)
            (if more?
              (recur highest-block (exit-time) packets)
              (final-ack highest-block socket
