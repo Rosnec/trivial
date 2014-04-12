@@ -39,13 +39,22 @@
                  (= port server-port)
                  (= opcode :DATA))
             (recur (get-time))
+            (and (= address server-address)
+                 (= port server-port))
+            (case opcode
+              :DATA (recur (get-time))
+              :ERROR (verbose "error received on final ack")
+              (do
+                (verbose "unexpected response:" response)
+                (recur (get-time))))
+            
 
             ; haven't timed out yet, resend ACK
             (> timeout (System/nanoTime))
             (recur time-limit)
 
             ; timed out, exit
-            :default (do (verbose "final timeout") nil)))))))
+            :default (verbose "final timeout")))))))
 
 (defn write-bytes
   "Takes an arbitrary number of byte sequences and writes them to the
@@ -130,7 +139,7 @@
             (case error-code
               :FILE-NOT-FOUND (println "File not found,"
                                        "terminating connection.")
-              :ILLEGAL-OPERATION (println "ERROR:" error-msg)
+;              :ILLEGAL-OPERATION (println "ERROR:" error-msg)
               :UNDEFINED (do
                            (verbose error-msg)
                            (recur last-block expected-block time-limit))
@@ -158,8 +167,7 @@
            (if decoded-packet
              (assoc-in m [:packets (:block decoded-packet)]
                        (assoc decoded-packet
-                         ; whether or not more packets should follow
-                         :more? (= tftp/DATA-SIZE length)))
+                         :length length))
              m))
          m))))
 
@@ -168,13 +176,15 @@
   number to the new value. Writes the packets with block# less than the given
   block number."
   ([m block write-agent output-stream]
-     (let [write-data (vals (take-while (fn [[k v]] (<= k block))
-                                        (:packets m)))]
-       (send-off write-agent write-bytes output-stream write-data))
-     (assoc m
-       :block block
-       :packets (sorted-map)
-       :more? (:more? (last (:packets m))))))
+     (let [packets (vals (take-while (fn [[k v]] (<= k block))
+                                     (:packets m)))
+           bytes (map :data packets)
+           _ (send-off write-agent write-bytes output-stream bytes)
+           more? (= (-> packets last :length) tftp/DATA-SIZE)]
+       (assoc m
+         :block block
+         :packets (sorted-map)
+         :more? more?))))
 
 (defn window-results
   ""
