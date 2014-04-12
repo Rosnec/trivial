@@ -52,7 +52,7 @@
                     (verbose "Session with" address "at port" port
                              "timed out.")
                     false)))
-              (when (not-any? (nil? current-address) (nil? current-port))
+              (when (not (or (nil? current-address) (nil? current-port)))
                 (tftp/error-tid socket current-address current-port))))
           ; sent all packets, but final packet had 512B of data,
           ; so we need to send a terminating 0B packet
