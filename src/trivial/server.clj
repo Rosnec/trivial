@@ -124,7 +124,7 @@
                      (= port current-port)
                      (= opcode :ACK))
               (if (> block num-acked)
-                (let [newly-acked (- block num-acked)]
+                (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
                   (recur (nthrest panorama newly-acked)
                          block
                          empty-packet

@@ -180,7 +180,7 @@
                                      (:packets m)))
            bytes (map :data packets)
            _ (send-off write-agent write-bytes output-stream bytes)
-           more? (= (-> packets last :length) tftp/DATA-SIZE)]
+           more? (dbg (= (-> packets last :length) tftp/DATA-SIZE))]
        (assoc m
          :block block
          :packets (sorted-map)
@@ -195,7 +195,7 @@
        (send-off window-agent
                  clear-packets highest-block write-agent output-stream)
        (await window-agent)
-       [highest-block (-> packets vals last :more?)])))
+       [highest-block (:more? @window-agent)])))
 
 (def window-agent-map
   {:block 0,
