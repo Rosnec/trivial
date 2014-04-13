@@ -122,18 +122,18 @@
                     {}))]
             (if (and (= address current-address)
                      (= port current-port)
-                     (= opcode :ACK))
-              (if (> block num-acked)
-                (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
+                     (= opcode :ACK)
+                     (> block num-acked))
+              (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
                   (recur (nthrest panorama newly-acked)
                          block
                          empty-packet
                          (time-to-exit)))
-                (if (> exit-time (System/nanoTime))
+              (if (> exit-time (System/nanoTime))
                   (recur panorama num-acked empty-packet exit-time)
                   (do
                     (verbose "Session with" address "at port" port "timed out.")
-                    false)))))
+                    false))))
 
           empty-packet
           (tftp/send socket empty-packet)
