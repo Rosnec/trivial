@@ -176,9 +176,10 @@
                         port)
                (verbose "Connected to" address "on port" port)
                (if (= opcode :RRQ)
-                 (let [session-fn (if (zero? window-size)
-                                    (dbg lockstep-session)
-                                    (dbg (partial sliding-session window-size)))]
+                 (let [session-fn
+                       (if (zero? window-size)
+                         (dbg lockstep-session)
+                         (dbg (partial sliding-session window-size)))]
                    (try
                      (let [start-time (System/nanoTime)
                            success?
