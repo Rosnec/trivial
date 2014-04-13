@@ -73,6 +73,7 @@
               num-acked 0
               empty-packet nil
               exit-time (time-to-exit)]
+         (verbose "ack count:" num-acked)
          (cond
           (not-empty panorama)
           (let [window (first panorama)

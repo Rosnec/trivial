@@ -239,14 +239,15 @@
        (loop [last-block 0
               session-time-limit (exit-time)
               packets (repeatedly make-data-packet)]
-         (send-ack last-block)
-         (verbose "ACK:" last-block)
          (let [packets ; infinite lazy sequence of unused packets
                (loop [received 0
                       packets packets
                       window-time-limit (exit-time)]
                  (verbose "received:" received
                           "window-size:" window-size)
+                 (when (zero? received)
+                   (send-ack last-block)
+                   (verbose "ACK:" last-block))
                  (if-let [received?
                           (try
                             (tftp/recv* socket (first packets))
@@ -275,7 +276,9 @@
             (recur highest-block session-time-limit packets)
 
             more?
-            (recur highest-block (exit-time) packets)
+            (do
+              (verbose "There's moar to come")
+              (recur highest-block (exit-time) packets))
 
             :default
             (final-ack highest-block socket server-address server-port
