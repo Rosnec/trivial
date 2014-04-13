@@ -59,9 +59,10 @@
 (defn write-bytes
   "Takes an arbitrary number of byte sequences and writes them to the
   output-stream in-order."
-  ([output-stream & bytes]
-     (doseq [b bytes]       
-       (io/copy (byte-array b) output-stream))))
+  ([m output-stream & bytes]
+     (doseq [b bytes]
+       (io/copy (byte-array b) output-stream))
+     m))
 
 (defn lockstep-session
   "Runs a session with the provided proxy server using lockstep."
@@ -176,11 +177,18 @@
   number to the new value. Writes the packets with block# less than the given
   block number."
   ([m block write-agent output-stream]
-     (let [packets (vals (take-while (fn [[k v]] (<= k block))
+     (verbose "time to clear some things up")
+     write-agent
+     output-stream
+     (let [;; PROBLEM:
+           ;;  Potentially takes packets which have already been written.
+           ;;  Needs some way to check that we're greater than the
+           ;;  last block received, and not just <= the highest block wanted.
+           packets (vals (take-while (fn [[k v]] (<= k block))
                                      (:packets m)))
            bytes (map :data packets)
-           _ (send-off write-agent write-bytes output-stream bytes)
-           more? (dbg (= (-> packets last :length) tftp/DATA-SIZE))]
+           _ (apply send-off write-agent write-bytes output-stream bytes)
+           more? (= (-> packets last :length) tftp/DATA-SIZE)]
        (assoc m
          :block block
          :packets (sorted-map)
@@ -192,6 +200,8 @@
      (await window-agent)
      (let [{:keys [block packets]} @window-agent
            highest-block (math/highest-sequential (keys packets) block 1)]
+       window-agent
+       write-agent
        (send-off window-agent
                  clear-packets highest-block write-agent output-stream)
        (await window-agent)
@@ -258,8 +268,8 @@
                      (send-off window-agent
                                add-packet (first packets)
                                server-address server-port)
-                     (if (dbg (and (< received window-size-dec)
-                                   (> window-time-limit (System/nanoTime))))
+                     (if (and (< received window-size-dec)
+                              (> window-time-limit (System/nanoTime)))
                        (recur (inc received) (rest packets) window-time-limit)
                        (rest packets)))
                    (if (> window-time-limit (System/nanoTime))
@@ -349,7 +359,7 @@
                            (= port server-port))
                       (if (= length tftp/DATA-SIZE)
                         (do
-                          (send-write (dbg data))
+                          (send-write data)
                           (if (or (= block final-block)
                                   (> (System/nanoTime) time-limit))
                             (dbg next-block)
