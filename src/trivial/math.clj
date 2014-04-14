@@ -28,6 +28,6 @@
      (if (empty? coll)
        start
        (let [nxt (first coll)]
-         (if (== (+ start step) nxt)
+         (if (= (+ start step) nxt)
            (recur (rest coll) nxt step)
            start)))))

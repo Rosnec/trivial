@@ -1,5 +1,6 @@
 (ns trivial.client
-  (:require [clojure.java.io :as io]
+  (:require [clojure.core.reducers :as r]
+            [clojure.java.io :as io]
             [gloss.io :refer [decode]]
             [trivial.math :as math]
             [trivial.tftp :as tftp]
@@ -176,7 +177,7 @@
   "Clears the :packets map from the window-agent's map. Sets the :block
   number to the new value. Writes the packets with block# less than the given
   block number."
-  ([m block write-agent output-stream]
+  ([m end-block write-agent output-stream]
      (verbose "time to clear some things up")
      write-agent
      output-stream
@@ -184,13 +185,19 @@
            ;;  Potentially takes packets which have already been written.
            ;;  Needs some way to check that we're greater than the
            ;;  last block received, and not just <= the highest block wanted.
-           packets (vals (take-while (fn [[k v]] (<= k block))
-                                     (:packets m)))
+           ;; I believe this is what is causing my output file to have
+           ;; repetition in it.
+           start-block (:block m)
+           blocks-to-write (dbg (range (inc start-block) (inc end-block)))
+           packets (-> (:packets m)
+                       (subseq > start-block <= end-block)
+                        vals)
+           _ (verbose (map :block packets))
            bytes (map :data packets)
            _ (apply send-off write-agent write-bytes output-stream bytes)
            more? (= (-> packets last :length) tftp/DATA-SIZE)]
        (assoc m
-         :block block
+         :block end-block
          :packets (sorted-map)
          :more? more?))))
 
@@ -253,8 +260,6 @@
                (loop [received 0
                       packets packets
                       window-time-limit (exit-time)]
-                 (verbose "received:" received
-                          "window-size:" window-size)
                  (when (zero? received)
                    (send-ack last-block)
                    (verbose "ACK:" last-block))
