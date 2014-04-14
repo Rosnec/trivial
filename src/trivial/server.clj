@@ -63,6 +63,19 @@
           :default (do (verbose "Transfer complete.")
                        true))))))
 
+(comment
+  (defn window-finalizer
+    ([panorama window-size packet-size block address port]
+       (if (nnext panorama)
+         (let [window (next panorama)
+               last-packet-size (-> window last .length)]
+           (if (= last-packet-size packet-size)
+             (let [final-packet (make-empty-packet ...)]
+               (if (= window-size (count window))
+                 [window [final-packet]]
+                 [(lazy-cat window final-packet)]))
+             panorama))))))
+
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
   ([window-size packets socket address port timeout]
