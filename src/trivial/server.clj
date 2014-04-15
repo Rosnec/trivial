@@ -79,7 +79,7 @@
   window is full, puts packet in the next window. If the window has
   already been finalized, nothing is done."
   ([panorama window-size block address port processed?]
-     (if (or (nnext panorama) processed?)
+     (if (or (dbg (nnext panorama)) (dbg processed?))
        ; nothing needs to be done if there is another window or if the
        ; panorama has already been processed
        [panorama true]
