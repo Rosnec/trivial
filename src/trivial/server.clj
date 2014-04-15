@@ -90,8 +90,8 @@
                  final-packet (make-final-packet block   packets-in-window
                                                  address port)]
              (if (= window-size packets-in-window)
-               [[window [final-packet]] true]
-               [[(lazy-cat window [final-packet])] true]))
+               [window [final-packet]]
+               [(lazy-cat window [final-packet])]))
            panorama)))))
 
 (defn send-window
