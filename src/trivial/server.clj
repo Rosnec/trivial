@@ -83,8 +83,7 @@
        ; nothing needs to be done if there is another window or if the
        ; panorama has already been processed
        panorama
-       (let [window (next panorama)
-             _ (verbose (last window))
+       (let [window (first panorama)
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
            (let [packets-in-window (count window)
@@ -92,11 +91,14 @@
                                                  address port)]
              (if (= window-size packets-in-window)
                [[window [final-packet]] true]
-               [[(lazy-cat window final-packet)] true]))
+               [[(lazy-cat window [final-packet])] true]))
            panorama)))))
 
 (defn send-window
-  ([socket window] (doseq [packet window] (tftp/send socket packet))))
+  ([socket window] (doseq [packet window]
+                     (verbose "type" (type packet)
+                              "size" (count packet))
+                     (tftp/send socket packet))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
