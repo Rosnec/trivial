@@ -67,7 +67,7 @@
   "Makes the final packet for a file transfer, for use when the last packet had
   exactly 512 bytes of data. Signals EOF to the client on the socket."
   ([block packets-left address port]
-     (tftp/empty-data-packet (dbg (+ block packets-left 1)) ; off-by-one? probably
+     (tftp/empty-data-packet (+ block packets-left 1) ; off-by-one? probably
                              address port)))
 
 
@@ -82,7 +82,7 @@
      (if (or (dbg (nnext panorama)) (dbg processed?))
        ; nothing needs to be done if there is another window or if the
        ; panorama has already been processed
-       [panorama true]
+       panorama
        (let [window (next panorama)
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
@@ -92,7 +92,7 @@
              (if (= window-size packets-in-window)
                [[window [final-packet]] true]
                [[(lazy-cat window final-packet)] true]))
-           [panorama true])))))
+           panorama)))))
 
 (defn send-window
   ([socket window] (doseq [packet window] (tftp/send socket packet))))
@@ -110,7 +110,7 @@
          (verbose "ack count:" num-acked)
          (cond
           (not-empty panorama)
-          (let [[panorama processed?]
+          (let [panorama
                 (window-finalizer panorama window-size num-acked
                                   address port
                                   processed?)
@@ -143,10 +143,10 @@
               (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
                   (recur (nthrest panorama newly-acked)
                          block
-                         processed?
+                         false
                          (time-to-exit)))
               (if (> exit-time (System/nanoTime))
-                  (recur panorama num-acked processed? exit-time)
+                  (recur panorama num-acked true exit-time)
                   (do
                     (verbose "Session with" address "at port" port "timed out.")
                     false))))
