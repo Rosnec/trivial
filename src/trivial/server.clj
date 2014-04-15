@@ -67,7 +67,7 @@
   "Makes the final packet for a file transfer, for use when the last packet had
   exactly 512 bytes of data. Signals EOF to the client on the socket."
   ([block packets-left address port]
-     (tftp/empty-data-packet (+ block packets-left 1) ; off-by-one? probably
+     (tftp/empty-data-packet (dbg (+ block packets-left 1)) ; off-by-one? probably
                              address port)))
 
 
@@ -79,10 +79,12 @@
   window is full, puts packet in the next window. If the window has
   already been finalized, nothing is done."
   ([panorama window-size block address port processed?]
-     (if (or (dbg (nnext panorama)) (dbg processed?))
+     (if (or (dbg (nnext panorama)) processed?)
        ; nothing needs to be done if there is another window or if the
-       ; panorama has already been processed
-       panorama
+                                        ; panorama has already been processed
+       (do
+         (verbose "do nothing")
+         panorama)
        (let [window (first panorama)
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
@@ -90,9 +92,11 @@
                  final-packet (make-final-packet block   packets-in-window
                                                  address port)]
              (if (= window-size packets-in-window)
-               [window [final-packet]]
-               [(lazy-cat window [final-packet])]))
-           panorama)))))
+               (dbg [window [final-packet]])
+               (dbg [(lazy-cat window [final-packet])])))
+           (do
+             (verbose "aready done lol")
+             panorama))))))
 
 (defn send-window
   ([socket window] (doseq [packet window]
