@@ -40,6 +40,7 @@
                  (= port server-port)
                  (= opcode :DATA))
             (recur (get-time))
+            
             (and (= address server-address)
                  (= port server-port))
             (case opcode
@@ -48,11 +49,11 @@
               (do
                 (verbose "unexpected response:" response)
                 (recur (get-time))))
-            
 
             ; haven't timed out yet, resend ACK
             (> timeout (System/nanoTime))
-            (recur time-limit)
+            (do (verbose "RESEND")
+                (recur time-limit))
 
             ; timed out, exit
             :default (verbose "final timeout")))))))

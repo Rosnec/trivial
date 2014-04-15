@@ -84,6 +84,7 @@
        ; panorama has already been processed
        panorama
        (let [window (next panorama)
+             _ (verbose (last window))
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
            (let [packets-in-window (count window)
