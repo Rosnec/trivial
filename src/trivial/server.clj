@@ -96,8 +96,7 @@
 
 (defn send-window
   ([socket window] (doseq [packet window]
-                     (verbose "type" (type packet)
-                              "size" (count packet))
+                     (verbose "type" (type packet))
                      (tftp/send socket packet))))
 
 (defn sliding-session
