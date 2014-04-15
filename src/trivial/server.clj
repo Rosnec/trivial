@@ -63,18 +63,39 @@
           :default (do (verbose "Transfer complete.")
                        true))))))
 
-(comment
-  (defn window-finalizer
-    ([panorama window-size packet-size block address port]
-       (if (nnext panorama)
-         (let [window (next panorama)
-               last-packet-size (-> window last .length)]
-           (if (= last-packet-size packet-size)
-             (let [final-packet (make-empty-packet ...)]
-               (if (= window-size (count window))
-                 [window [final-packet]]
-                 [(lazy-cat window final-packet)]))
-             panorama))))))
+(defn make-final-packet
+  "Makes the final packet for a file transfer, for use when the last packet had
+  exactly 512 bytes of data. Signals EOF to the client on the socket."
+  ([block packets-left address port]
+     (tftp/empty-data-packet (+ block packets-left 1) ; off-by-one? probably
+                             address port)))
+
+
+
+(defn window-finalizer
+  "If the next window in the panorama is the final window, adds an
+  empty data packet to the end of it to signal EOF to the client, in
+  the event that the final packet is exactly the maximum size. If the
+  window is full, puts packet in the next window. If the window has
+  already been finalized, nothing is done."
+  ([panorama window-size block address port processed?]
+     (if (or (nnext panorama) processed?)
+       ; nothing needs to be done if there is another window or if the
+       ; panorama has already been processed
+       [panorama true]
+       (let [window (next panorama)
+             last-packet-size (-> window last .getLength)]
+         (if (= last-packet-size tftp/DATA-SIZE)
+           (let [packets-in-window (count window)
+                 final-packet (make-final-packet block   packets-in-window
+                                                 address port)]
+             (if (= window-size packets-in-window)
+               [[window [final-packet]] true]
+               [[(lazy-cat window final-packet)] true]))
+           [panorama true])))))
+
+(defn send-window
+  ([socket window] (doseq (packet window) (tftp/send socket packet))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
@@ -84,38 +105,19 @@
            time-to-exit (partial math/elapsed-time timeout)]
        (loop [panorama (partition window-size 1 packets)
               num-acked 0
-              empty-packet nil
+              processed? false
               exit-time (time-to-exit)]
          (verbose "ack count:" num-acked)
          (cond
           (not-empty panorama)
-          (let [window (first panorama)
-                ; determine whether an empty packet needs to be sent
-                empty-packet (and (nil? (next panorama)) ; last window
-                                  (= tftp/DATA-SIZE
-                                     (.getLength (last window))))
-                [window empty-packet]
-                (if empty-packet
-                  (let [current-window-size (count window)]
-                    (if (< current-window-size window-size)
-                      [(lazy-cat window
-                                 [(tftp/data-packet (+ num-acked
-                                                       current-window-size
-                                                       1)
-                                                    []
-                                                    address
-                                                    port)])
-                       false]
-                      [window
-                       (tftp/data-packet (+ num-acked
-                                            current-window-size
-                                            1)
-                                         []
-                                         address
-                                         port)]))
-                  [window false])
+          (let [[panorama processed?]
+                (window-finalizer panorama window-size num-acked
+                                  address port
+                                  processed?)
+                window (first panorama)
+
                 ; send the window
-                _ (doseq [packet window] (tftp/send socket packet))
+                _ (send-window socket window)
                 {current-address :address
                  current-port    :port
                  :keys [block opcode]
@@ -141,16 +143,13 @@
               (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
                   (recur (nthrest panorama newly-acked)
                          block
-                         empty-packet
+                         processed?
                          (time-to-exit)))
               (if (> exit-time (System/nanoTime))
-                  (recur panorama num-acked empty-packet exit-time)
+                  (recur panorama num-acked processed? exit-time)
                   (do
                     (verbose "Session with" address "at port" port "timed out.")
                     false))))
-
-          empty-packet
-          (tftp/send socket empty-packet)
 
           :default (do (verbose "Transfer complete")
                        true))))))

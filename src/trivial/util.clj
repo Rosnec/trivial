@@ -38,3 +38,16 @@
 (defn verbose
   "When *verbose* is true, outputs body to stderr."
   ([& more] (when *verbose* (apply println-err more))))
+
+(defn juxt->
+  "Threads the expr through the forms in the [key form] pairs, and returns
+  a mapping of key to the result of threading expr through the corresponding
+  form. Repeated keys are treated as multiple calls to assoc.
+
+  Credit: arrdem <http://arrdem.com/>"
+  ([expr & pairs]
+     (let [pairs (partition 2 pairs)
+;           [keys fns] (map map [first second] (repeat pairs))
+           keys (map first pairs)
+           fns (map second pairs)]
+       (zipmap keys ((apply juxt fns) expr)))))

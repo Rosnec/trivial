@@ -222,6 +222,12 @@
             packet-data
             (next (range))))))
 
+(defn empty-data-packet
+  "Returns an empty data packet with the given block #. Used as the terminating
+  signal for TFTP data transfer."
+  ([block address port]
+     (data-packet block [] address port)))
+
 (defn socket
   "Constructs a DatagramSocket."
   ([timeout]
