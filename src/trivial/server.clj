@@ -67,7 +67,7 @@
   "Makes the final packet for a file transfer, for use when the last packet had
   exactly 512 bytes of data. Signals EOF to the client on the socket."
   ([block packets-left address port]
-     (tftp/empty-data-packet (+ block packets-left) ; off-by-one? probably
+     (tftp/empty-data-packet (dbg (+ block packets-left 1)) ; off-by-one? probably
                              address port)))
 
 
