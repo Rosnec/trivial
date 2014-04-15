@@ -95,7 +95,7 @@
            [panorama true])))))
 
 (defn send-window
-  ([socket window] (doseq (packet window) (tftp/send socket packet))))
+  ([socket window] (doseq [packet window] (tftp/send socket packet))))
 
 (defn sliding-session
   "Sends the contents of stream to client using sliding window."
