@@ -116,7 +116,6 @@
          (cond
           (not-empty panorama)
           (let [window (first panorama)
-
                 ; send the window
                 _ (send-window socket window)
                 {current-address :address
