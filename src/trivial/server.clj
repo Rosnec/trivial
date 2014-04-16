@@ -85,7 +85,7 @@
        (do
          (verbose "do nothing")
          panorama)
-       (let [window (first panorama)1
+       (let [window (first panorama)
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
            (let [packets-in-window (count window)
