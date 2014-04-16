@@ -77,7 +77,11 @@
                     {}))))
 
           :default (do (verbose "Transfer complete")
-                       {:time (- (System/nanoTime) start-time)
+                       {:time-ms (->> start-time
+                                      (- (System/nanoTime))
+                                      (* 1e-6)
+                                      int)
+                        :time  (- (System/nanoTime) start-time)
                         :bytes (+ (* tftp/BLOCK-SIZE (dec num-acked))
                                   (-> last-sent
                                       .getLength
