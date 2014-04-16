@@ -35,7 +35,7 @@
      (let [next (fn next [prev coll]
                   (if-let [s (seq coll)]
                     (let [seg (doall (take n s))]
-                      (cons seg (next seg (nthrest s step))))
+                      (cons seg (lazy-seq (next seg (nthrest s step)))))
                     (when (= (count prev) n)
                       [()])))]
        (lazy-seq (next () coll)))))
