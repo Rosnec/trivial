@@ -92,7 +92,7 @@
                                   "IPv4"
                                   (instance? java.net.Inet6Address address)
                                   "IPv6"
-                                  "nil")}))))))
+                                  :default "nil")}))))))
 
 (defn start
   ([{:keys [output port timeout] :as options}]
