@@ -36,6 +36,7 @@
            time-to-exit (partial math/elapsed-time timeout)]
        (loop [panorama (partition-all window-size 1 packets)
               num-acked 0
+              last-sent nil
               exit-time (time-to-exit)]
          (cond
           (not-empty panorama)
@@ -67,9 +68,10 @@
               (let [newly-acked (- block num-acked)]
                   (recur (nthrest panorama newly-acked)
                          block
+                         (nth window (dec newly-acked))
                          (time-to-exit)))
               (if (> exit-time (System/nanoTime))
-                  (recur panorama num-acked exit-time)
+                  (recur panorama num-acked last-sent exit-time)
                   (do
                     (verbose "Session with" address "at port" port "timed out.")
                     {}))))
@@ -77,9 +79,7 @@
           :default (do (verbose "Transfer complete")
                        {:time (- (System/nanoTime) start-time)
                         :bytes (+ (* tftp/BLOCK-SIZE (dec num-acked))
-                                  (-> panorama
-                                      last
-                                      last
+                                  (-> last-sent
                                       .getLength
                                       (- tftp/OVERHEAD-SIZE)))
                         :window window-size
