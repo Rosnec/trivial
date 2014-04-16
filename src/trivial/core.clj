@@ -22,6 +22,8 @@
     :default 30
     :parse-fn #(Integer/parseInt %)
     :validate [pos? "Must be a positive integer"]]
+   ["-o" "--output FILE" "Output filename"
+    :id :output]
    ["-v" "--verbose" "Verbose"
     :id :verbose?
     :default false],
@@ -34,8 +36,6 @@
    [nil "--IPv6" "IPv6 mode"
     :id :IPv6?
     :default false],
-   ["-o" "--output FILE" "Output filename"
-    :id :output]
    [nil "--window-size SIZE" "Size of window for sliding-window mode."
     :id :window-size
     :default 0

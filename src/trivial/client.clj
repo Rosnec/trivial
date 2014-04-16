@@ -21,7 +21,6 @@
   ([block socket server-address server-port timeout data-packet]
      (let [get-time (partial math/elapsed-time timeout)]
        (loop [time-limit (get-time)]
-         (verbose "ACKing")
          ; send the ack
          (tftp/send socket (tftp/ack-packet block server-address server-port))
          ; await a response
@@ -29,10 +28,9 @@
                (try
                  (tftp/recv socket data-packet server-address server-port)
                  (catch java.net.SocketTimeoutException e
-                   (verbose "Timed out")
                    {})
                  (catch clojure.lang.ExceptionInfo e
-                   (verbose "Other exception")
+                   (verbose "unexpected exception" e)
                    {}))]
            (cond
             ; received data packet from server, resend ACK
@@ -52,8 +50,7 @@
 
             ; haven't timed out yet, resend ACK
             (> timeout (System/nanoTime))
-            (do (verbose "RESEND")
-                (recur time-limit))
+            (recur time-limit)
 
             ; timed out, exit
             :default (verbose "final timeout")))))))
@@ -65,89 +62,6 @@
      (doseq [b bytes]
        (io/copy (byte-array b) output-stream))
      m))
-
-(defn lockstep-session
-  "Runs a session with the provided proxy server using lockstep."
-  ([url output-stream socket server-address server-port timeout]
-     (let [file-writer (agent 0)
-           write-bytes (fn write-bytes [bytes]
-                         (io/copy (byte-array bytes) output-stream))
-           send-write (fn send-write [bytes]
-                        (send-off file-writer (fn [_] (write-bytes bytes))))
-           rrq-packet (tftp/rrq-packet url 0 server-address server-port)
-           data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-           send-rrq (partial tftp/send socket rrq-packet)
-           send-ack (fn ack [block]
-                      (if (zero? block)
-                        (send-rrq)
-                        (tftp/send socket
-                                   (tftp/ack-packet block
-                                                    server-address
-                                                    server-port))))
-           error-malformed (partial tftp/error-malformed socket)
-           error-not-found (partial tftp/error-not-found socket)
-           error-tid       (partial tftp/error-tid socket)
-           exit-time (partial math/elapsed-time timeout)]
-       (loop [last-block     0
-              expected-block 1
-              time-limit     (exit-time)]
-         (send-ack last-block)
-         (let [{:keys [address block data error-code error-msg length
-                       opcode port retry?]
-                :as response}
-               (try
-                 (tftp/recv socket data-packet server-address server-port)
-                 (catch java.net.SocketTimeoutException e
-                   {:retry? true})
-                 (catch clojure.lang.ExceptionInfo e
-                   (let [{:keys [address cause port]} (ex-data e)]
-                     (verbose (.getMessage e))
-                     (case cause
-                       :malformed (error-malformed address port)
-                       :unknown-sender (error-tid address port)
-                       nil))
-                   {:retry? true}))]
-           (cond
-            (and (or retry?
-                     (not= block expected-block)
-                     (not= address server-address)
-                     (not= port server-port))
-                 (> time-limit (System/nanoTime)))
-            (recur last-block expected-block time-limit)
-
-            (= block expected-block)
-            (do
-              (verbose (str "Received:\n"
-                            "  block#: " block "\n"
-                            "  length: " length))
-              (if (= length tftp/DATA-SIZE)
-                (do
-                  (send-write data)
-                  (recur expected-block
-                         (inc expected-block)
-                         (exit-time)))
-                (do
-                  (send-write data)
-                  (final-ack block
-                             socket
-                             server-address
-                             server-port
-                             2e9 ; wait 2 seconds on final ack
-                             data-packet)
-                  (await file-writer)
-                  (println "Transfer successful.")
-                  (util/exit 0))))
-
-            (= opcode :ERROR)
-            (case error-code
-              :FILE-NOT-FOUND (println "File not found,"
-                                       "terminating connection.")
-;              :ILLEGAL-OPERATION (println "ERROR:" error-msg)
-              :UNDEFINED (do
-                           (verbose error-msg)
-                           (recur last-block expected-block time-limit))
-              (println "ERROR:" error-msg))
-            :default (println "Disconnected.")))))))
 
 (defn add-packet
   "Adds a packet to the :packets map of a window-agent's map.
@@ -182,18 +96,11 @@
      (verbose "time to clear some things up")
      write-agent
      output-stream
-     (let [;; PROBLEM:
-           ;;  Potentially takes packets which have already been written.
-           ;;  Needs some way to check that we're greater than the
-           ;;  last block received, and not just <= the highest block wanted.
-           ;; I believe this is what is causing my output file to have
-           ;; repetition in it.
-           start-block (:block m)
+     (let [start-block (:block m)
            blocks-to-write (dbg (range (inc start-block) (inc end-block)))
            packets (-> (:packets m)
                        (subseq > start-block <= end-block)
                         vals)
-           _ (verbose (map :block packets))
            bytes (map :data packets)
            _ (apply send-off write-agent write-bytes output-stream bytes)
            more? (= (-> packets last :length) tftp/DATA-SIZE)]
@@ -228,10 +135,11 @@
   "Returns an empty window agent"
   ([] (agent window-agent-map)))
 
-(defn sliding-session
+(defn session
   "Runs a session with the provided proxy server using sliding window."
   ([window-size url output-stream socket server-address server-port timeout]
-     (let [; need 1 less than the window size in the receive loop
+     (let [; need 1 less than the window size in the receive loop,
+           ; computing that number ahead of time
            window-size-dec (dec window-size)
            window-agent (make-window-agent)
            file-writer (make-writer-agent)
@@ -262,8 +170,7 @@
                       packets packets
                       window-time-limit (exit-time)]
                  (when (zero? received)
-                   (send-ack last-block)
-                   (verbose "ACK:" last-block))
+                   (send-ack last-block))
                  (if-let [received?
                           (try
                             (tftp/recv* socket (first packets))
@@ -282,11 +189,11 @@
                      (recur received packets window-time-limit)
                      packets)))
                [highest-block more?] (window-results)]
-           (verbose "highest block:" highest-block
-                    ", more?:" more?)
            (cond
             (> (System/nanoTime) session-time-limit)
-            (util/exit 1 "Session timed out.")
+            (do
+              (shutdown-agents)
+              (util/exit 1 "Session timed out."))
 
             (= highest-block last-block)
             (recur highest-block session-time-limit packets)
@@ -297,126 +204,18 @@
               (recur highest-block (exit-time) packets))
 
             :default
-            (final-ack highest-block socket server-address server-port
-                       2e9 (first packets))))))))
-
-(comment
-  (defn sliding-session
-    "Runs a session with the provided proxy server using sliding window."
-    ([window-size url output-stream socket server-address server-port timeout]
-       (let [file-writer (agent 0)
-             write-bytes (fn write-bytes [bytes]
-                           (io/copy (byte-array bytes) output-stream))
-             send-write (fn send-write [bytes]
-                          (send-off file-writer (fn [_] (write-bytes bytes))))
-             rrq-packet (tftp/rrq-packet url
-                                         window-size
-                                         server-address
-                                         server-port)
-             data-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
-             send-rrq (partial tftp/send socket rrq-packet)
-             send-ack (fn send-ack [block]
-                        (if (zero? block)
-                          (send-rrq)
-                          (tftp/send socket
-                                     (tftp/ack-packet block
-                                                      server-address
-                                                      server-port))))
-             exit-time (partial math/elapsed-time timeout)
-             window-time (partial math/elapsed-time tftp/*window-time*)]
-         (loop [last-block 0
-                time-limit (exit-time)]
-           (send-ack last-block)
-           (let [current-block ; I think this is being incremented when
-                                        ; it shouldn't be
-                 (loop [next-block (inc last-block)
-                        final-block (+ next-block window-size)
-                        time-limit (window-time)]
-                   (let [{:keys [address block data error-code error-msg length
-                                 opcode port]}
-                         (try (tftp/recv socket
-                                         data-packet
-                                         server-address
-                                         server-port)
-                              (catch java.net.SocketTimeoutException e
-                                {})
-                              (catch clojure.lang.ExceptionInfo e
-                                (let [{:keys [address cause port]} (ex-data e)]
-                                  (verbose (.getMessage e))
-                                  (case cause
-                                    :malformed (tftp/error-malformed socket
-                                                                     address
-                                                                     port)
-                                    :unknown-sender (tftp/error-tid socket
-                                                                    address
-                                                                    port)
-                                    nil))
-                                {}))]
-                     (cond
-                      (and (or (not= block next-block)
-                               (not= address server-address)
-                               (not= port server-port))
-                           (> time-limit (System/nanoTime)))
-                      (recur next-block final-block time-limit)
-
-                                        ; correct block received
-                      (and (= block next-block)
-                           (= address server-address)
-                           (= port server-port))
-                      (if (= length tftp/DATA-SIZE)
-                        (do
-                          (send-write data)
-                          (if (or (= block final-block)
-                                  (> (System/nanoTime) time-limit))
-                            (dbg next-block)
-                            (recur (inc block) final-block time-limit)))
-                        (do
-                          (send-write data)
-                          (final-ack block
-                                     socket
-                                     server-address
-                                     server-port
-                                     2e9 ; wait 2 seconds on final ack
-                                     data-packet)
-                          (await file-writer)
-                          (println "Transfer successful.")
-                          (util/exit 0)))
-
-                      (= opcode :error)
-                      (case error-code
-                        :FILE-NOT-FOUND
-                        (util/exit 1 (str "File not found, "
-                                          "terminating connection."))
-                        :UNDEFINED (do
-                                     (verbose error-msg)
-                                     (recur next-block final-block time-limit))
-                        (println "ERROR:" error-msg))
-
-                      :default (do
-                                 (verbose "Window timed out.")
-                                 (dbg (dec next-block))))))]
-             (verbose current-block)
-             (cond
-              (> current-block last-block)
-              (do (send-ack current-block)
-                  (recur current-block (exit-time)))
-
-              (> time-limit (System/nanoTime))
-              (recur last-block time-limit)
-
-              :default (util/exit 1 "Disconnected."))))))))
+            (do (final-ack highest-block socket server-address server-port
+                           2e9 (first packets))
+                (shutdown-agents))))))))
 
 (defn start
   ([url {:keys [hostname IPv6? output port window-size timeout] :as options}]
      (let [ip-fn (if IPv6? IPv6-address IPv4-address)
-           address (ip-fn hostname)
-           session-fn (if (not= 0 window-size)
-                        (partial sliding-session window-size)
-                        lockstep-session)]
+           address (ip-fn hostname)]
        (verbose "Connecting to" address "at port" port)
        (io/delete-file output true)
        (with-open [socket (tftp/socket tftp/*timeout*)
                    output-stream (io/output-stream (io/file output)
                                                    :append true)]
-         (session-fn url output-stream socket address port
-                     (* timeout 1e9))))))
+         (session window-size url output-stream socket address port
+                  (* timeout 1e9))))))

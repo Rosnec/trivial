@@ -27,7 +27,8 @@
 
 ;; Size constants ;;
 (def BLOCK-SIZE 512)
-(def DATA-SIZE (+ BLOCK-SIZE 4))
+(def OVERHEAD-SIZE 4)
+(def DATA-SIZE (+ BLOCK-SIZE OVERHEAD-SIZE))
 
 ;; Octet encoding ;;
 (def octet (repeated :ubyte :prefix :none))
