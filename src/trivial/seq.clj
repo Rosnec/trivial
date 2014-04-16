@@ -24,3 +24,18 @@
                       (when (== prev bufsize)
                         [()]))))]
        (lazy-seq (step 0)))))
+
+(defn partition-extra
+  "Like partition-all, but if the final partition is exactly of size n, adds
+  an empty partition to the end (i.e. guarantees that the last partition will
+  not be full)."
+  ([n coll]
+     (partition-extra n n coll))
+  ([n step coll]
+     (let [next (fn next [prev coll]
+                  (if-let [s (seq coll)]
+                    (let [seg (doall (take n s))]
+                      (cons seg (next seg (nthrest s step))))
+                    (when (= (count prev) n)
+                      [()])))]
+       (lazy-seq (next () coll)))))

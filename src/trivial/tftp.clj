@@ -213,11 +213,14 @@
                            {:cause :unknown-sender
                             :address address
                             :port port})))))))
+
 (defn stream-to-packets
   "Takes a stream of bytes along with an address and port to send to,
   and returns a lazy sequence of packets containing that data."
   ([stream address port]
-     (let [packet-data (seq/lazy-input stream BLOCK-SIZE)]
+     (let [packet-data (->> stream
+                            seq/lazy-input
+                            (seq/partition-extra BLOCK-SIZE))]
        (map (fn [data block] (data-packet block data address port))
             packet-data
             (next (range))))))

@@ -109,7 +109,7 @@
      (verbose "it slides!")
      (let [recv-packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
            time-to-exit (partial math/elapsed-time timeout)]
-       (loop [panorama (partition window-size 1 packets)
+       (loop [panorama (partition-all window-size 1 packets)
               num-acked 0
               exit-time (time-to-exit)]
          (verbose "ack count:" num-acked)

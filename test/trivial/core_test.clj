@@ -1,5 +1,7 @@
 (ns trivial.core-test
+  (:require [clojure.java.io :as io])
   (:use clojure.test
+        trivial.seq
         trivial.server
         trivial.tftp
         trivial.util))
@@ -23,6 +25,15 @@
   ([n last-size address port]
      (lazy-cat (-> n dec random-packets)
                (random-packet n address port last-size))))
+
+(deftest size-test
+  (testing "Size of packets"
+    (let [url
+          "http://demo.borland.com/Testsite/stadyn_largepagewithimages.html"]
+      (with-open [stream (io/input-stream url)]
+        (let [lazy-byte-stream (lazy-input stream BLOCK-SIZE)]
+          (is (apply = BLOCK-SIZE (map count (butlast lazy-byte-stream))))
+          (println "last:" (-> lazy-byte-stream last count)))))))
 
 (deftest server-test
   (testing "Server"
