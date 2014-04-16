@@ -18,10 +18,10 @@
      (if (not-empty results)
        (str "\n"
             (string/join "\t"
-                         (:time results)
-                         (:size results)
-                         (:drop? results)
-                         (:version results)))
+                         [(:time results)
+                          (:size results)
+                          (:drop? results)
+                          (:version results)]))
        "")))
 
 (defn write-csv
@@ -91,10 +91,10 @@
                  output (io/output-stream (io/file output)
                                           :append true)]
        (io/copy (string/join "\t"
-                             "#time"
-                             "size"
-                             "drop?"
-                             "version")
+                             ["#time"
+                              "size"
+                              "drop?"
+                              "version"])
                 output)
        (let [packet (tftp/datagram-packet (byte-array tftp/DATA-SIZE))
              error-opcode-rrq (fn [opcode address port]
