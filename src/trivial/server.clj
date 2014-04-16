@@ -19,7 +19,8 @@
        (str "\n"
             (string/join "\t"
                          [(:time results)
-                          (:size results)
+                          (:bytes results)
+                          (:window results)
                           (:drop? results)
                           (:version results)]))
        "")))
@@ -76,11 +77,12 @@
 
           :default (do (verbose "Transfer complete")
                        {:time (- (System/nanoTime) start-time)
-                        :size (+ (* tftp/BLOCK-SIZE (dec num-acked))
-                                 (-> panorama
-                                     last
-                                     count
-                                     (- tftp/OVERHEAD-SIZE)))
+                        :bytes (+ (* tftp/BLOCK-SIZE (dec num-acked))
+                                  (-> panorama
+                                      last
+                                      count
+                                      (- tftp/OVERHEAD-SIZE)))
+                        :window window-size
                         :drop? tftp/*drop*
                         :version (type address)}))))))
 
@@ -92,7 +94,8 @@
                                           :append true)]
        (io/copy (string/join "\t"
                              ["#time"
-                              "size"
+                              "bytes"
+                              "window"
                               "drop?"
                               "version"])
                 output)
