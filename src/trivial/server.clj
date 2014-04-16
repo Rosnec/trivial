@@ -84,7 +84,13 @@
                                       (- tftp/OVERHEAD-SIZE)))
                         :window window-size
                         :drop? tftp/*drop*
-                        :version (type address)}))))))
+                        :version (cond
+                                  (instance? java.net.Inet4Address address)
+                                  "IPv4"
+                                  (instance? java.net.Inet6Address address)
+                                  "IPv6"
+                                  "nil")
+                        (type address)}))))))
 
 (defn start
   ([{:keys [output port timeout] :as options}]
