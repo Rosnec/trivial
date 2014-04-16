@@ -85,7 +85,7 @@
        (do
          (verbose "do nothing")
          panorama)
-       (let [window (first panorama)
+       (let [window (first panorama)1
              last-packet-size (-> window last .getLength)]
          (if (= last-packet-size tftp/DATA-SIZE)
            (let [packets-in-window (count window)
@@ -111,16 +111,11 @@
            time-to-exit (partial math/elapsed-time timeout)]
        (loop [panorama (partition window-size 1 packets)
               num-acked 0
-              processed? false
               exit-time (time-to-exit)]
          (verbose "ack count:" num-acked)
          (cond
           (not-empty panorama)
-          (let [panorama
-                (window-finalizer panorama window-size num-acked
-                                  address port
-                                  processed?)
-                window (first panorama)
+          (let [window (first panorama)
 
                 ; send the window
                 _ (send-window socket window)
@@ -149,10 +144,9 @@
               (let [newly-acked (dbg (- (dbg block) (dbg num-acked)))]
                   (recur (nthrest panorama newly-acked)
                          block
-                         false
                          (time-to-exit)))
               (if (> exit-time (System/nanoTime))
-                  (recur panorama num-acked true exit-time)
+                  (recur panorama num-acked exit-time)
                   (do
                     (verbose "Session with" address "at port" port "timed out.")
                     false))))

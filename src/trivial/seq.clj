@@ -16,9 +16,11 @@
        (lazy-seq (step))))
   ([input-stream bufsize]
      (let [buf (byte-array bufsize)
-           step (fn step []
+           step (fn step [prev]
                   (let [n (.read input-stream buf)]
-                    (when-not (== n -1)
+                    (if-not (== n -1)
                       (cons (doall (take n (map unchecked-byte (seq buf))))
-                            (lazy-seq (step))))))]
-       (lazy-seq (step)))))
+                            (lazy-seq (step n)))
+                      (when (== prev bufsize)
+                        [()]))))]
+       (lazy-seq (step 0)))))
