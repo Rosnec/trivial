@@ -8,7 +8,6 @@
 
 (defn send-window
   ([socket window] (doseq [packet window]
-                     (verbose "type" (type packet))
                      (tftp/send socket packet))))
 
 (defn result-string
@@ -80,7 +79,8 @@
                         :bytes (+ (* tftp/BLOCK-SIZE (dec num-acked))
                                   (-> panorama
                                       last
-                                      count
+                                      last
+                                      .getLength
                                       (- tftp/OVERHEAD-SIZE)))
                         :window window-size
                         :drop? tftp/*drop*
