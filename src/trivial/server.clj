@@ -17,7 +17,7 @@
      (if (not-empty results)
        (str "\n"
             (string/join "\t"
-                         [(:time results)
+                         [(:time-ms results)
                           (:bytes results)
                           (:window results)
                           (:drop? results)
@@ -101,7 +101,7 @@
                  output (io/output-stream (io/file output)
                                           :append true)]
        (io/copy (string/join "\t"
-                             ["#time"
+                             ["#time-ms"
                               "bytes"
                               "window"
                               "drop?"
