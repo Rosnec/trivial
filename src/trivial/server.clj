@@ -81,7 +81,6 @@
                                       (- (System/nanoTime))
                                       (* 1e-6)
                                       int)
-                        :time  (- (System/nanoTime) start-time)
                         :bytes (+ (* tftp/BLOCK-SIZE (dec num-acked))
                                   (-> last-sent
                                       .getLength
@@ -93,8 +92,7 @@
                                   "IPv4"
                                   (instance? java.net.Inet6Address address)
                                   "IPv6"
-                                  "nil")
-                        (type address)}))))))
+                                  "nil")}))))))
 
 (defn start
   ([{:keys [output port timeout] :as options}]
