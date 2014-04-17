@@ -25,7 +25,7 @@ Modes:
 Example
 =======
 
-```
+```bash
 ## launch server
 $ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/throughput.csv server
 ## launch client
