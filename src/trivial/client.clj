@@ -97,7 +97,7 @@
      write-agent
      output-stream
      (let [start-block (:block m)
-           blocks-to-write (dbg (range (inc start-block) (inc end-block)))
+           blocks-to-write (range (inc start-block) (inc end-block))
            packets (-> (:packets m)
                        (subseq > start-block <= end-block)
                         vals)

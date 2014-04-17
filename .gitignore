@@ -10,3 +10,8 @@ pom.xml
 *~
 \#*\#
 .\#*
+
+# Python
+__pycache__
+*.pyc
+*.pyo
