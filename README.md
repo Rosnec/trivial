@@ -25,9 +25,9 @@ Modes:
 Example
 =======
 ```
-# launch server
+## launch server
 $ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/throughput.csv server
-# launch client
+## launch client
 $ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/example.html client \
                                    --hostname=example@hostname.com http://www.example.com --window-size=64
 ```
