@@ -25,10 +25,11 @@ Modes:
 Example
 =======
 ```
-java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/throughput.csv server
-
-java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/example.html client \
-                                 --hostname=example@hostname.com http://www.example.com --window-size=64
+# launch server
+$ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/throughput.csv server
+# launch client
+$ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/example.html client \
+                                   --hostname=example@hostname.com http://www.example.com --window-size=64
 ```
 
 Credit
