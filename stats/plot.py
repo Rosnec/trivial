@@ -33,6 +33,6 @@ def plot_data(filename, output, title,
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.set_xticklabels(list(sorted(window_to_throughput)))
+    ax.set_xticklabels(list(sorted(map(int,window_to_throughput))))
 
     plt.savefig(output, dpi=500)
