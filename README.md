@@ -24,6 +24,7 @@ Modes:
 
 Example
 =======
+
 ```
 ## launch server
 $ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/directory/throughput.csv server
@@ -34,5 +35,7 @@ $ java -jar trivial-standalone.jar --port=8888 --timeout=10 --output=/output/dir
 
 Credit
 ======
+
 Dan Wysocki (c) 2014
+
 Licensed under the GNU General Public License version 3.
